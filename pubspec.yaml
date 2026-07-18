@@ -1,7 +1,7 @@
 name: mars_thoughts
 description: "Mars Thoughts — capture a thought before it disappears."
 publish_to: 'none'
-version: 0.1.0+1
+version: 0.2.0+2
 
 environment:
   sdk: ^3.11.0
@@ -17,14 +17,30 @@ dev_dependencies:
     sdk: flutter
   flutter_lints: ^6.0.0
   flutter_launcher_icons: ^0.14.1
+  flutter_native_splash: ^2.4.4
 
 flutter_launcher_icons:
   android: true
   ios: false
   image_path: "assets/icon.png"
 
+# Black splash with the logo centered. Regenerate after edits:
+#   dart run flutter_native_splash:create
+flutter_native_splash:
+  color: "#000000"
+  image: "assets/splash_logo.png"
+  android_12:
+    color: "#000000"
+    image: "assets/splash_logo.png"
+  android: true
+  ios: false
+  web: false
+
 flutter:
   uses-material-design: true
+
+  assets:
+    - assets/splash_logo.png
 
   fonts:
     - family: Outfit

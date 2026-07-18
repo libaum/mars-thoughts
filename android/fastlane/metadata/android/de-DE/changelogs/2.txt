@@ -1,0 +1,4 @@
+- Gedanken anheften, um sie oben zu behalten
+- Wischen zum Löschen, mit Papierkorb zum Wiederherstellen oder endgültigen Entfernen
+- Lesemodus mit Kopieren per Tipp; Doppeltippen zum Bearbeiten
+- Suche hebt jetzt die passenden Zeilen hervor

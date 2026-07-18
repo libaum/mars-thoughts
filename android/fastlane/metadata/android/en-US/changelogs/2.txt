@@ -1,0 +1,4 @@
+- Pin thoughts to keep them at the top
+- Swipe to delete, with a Trash to restore or remove for good
+- Read mode with one-tap copy; double-tap to edit
+- Search now highlights the matching lines
