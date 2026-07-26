@@ -8,15 +8,21 @@ class Thought {
   /// When the thought was pinned. `null` means not pinned.
   final DateTime? pinnedAt;
 
+  /// When the thought was moved to the trash. `null` means it's a live thought.
+  final DateTime? deletedAt;
+
   const Thought({
     required this.id,
     required this.text,
     required this.createdAt,
     required this.updatedAt,
     this.pinnedAt,
+    this.deletedAt,
   });
 
   bool get isPinned => pinnedAt != null;
+
+  bool get isDeleted => deletedAt != null;
 
   /// The first non-empty line, used as the list preview ("title").
   String get preview {
@@ -32,6 +38,8 @@ class Thought {
     DateTime? updatedAt,
     DateTime? pinnedAt,
     bool clearPinned = false,
+    DateTime? deletedAt,
+    bool clearDeleted = false,
   }) {
     return Thought(
       id: id,
@@ -39,6 +47,7 @@ class Thought {
       createdAt: createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       pinnedAt: clearPinned ? null : (pinnedAt ?? this.pinnedAt),
+      deletedAt: clearDeleted ? null : (deletedAt ?? this.deletedAt),
     );
   }
 
@@ -48,16 +57,19 @@ class Thought {
         'createdAt': createdAt.millisecondsSinceEpoch,
         'updatedAt': updatedAt.millisecondsSinceEpoch,
         'pinnedAt': pinnedAt?.millisecondsSinceEpoch,
+        'deletedAt': deletedAt?.millisecondsSinceEpoch,
       };
 
   factory Thought.fromJson(Map<String, dynamic> json) {
     final pinnedMs = json['pinnedAt'] as int?;
+    final deletedMs = json['deletedAt'] as int?;
     return Thought(
       id: json['id'] as String,
       text: json['text'] as String,
       createdAt: DateTime.fromMillisecondsSinceEpoch(json['createdAt'] as int),
       updatedAt: DateTime.fromMillisecondsSinceEpoch(json['updatedAt'] as int),
       pinnedAt: pinnedMs == null ? null : DateTime.fromMillisecondsSinceEpoch(pinnedMs),
+      deletedAt: deletedMs == null ? null : DateTime.fromMillisecondsSinceEpoch(deletedMs),
     );
   }
 }

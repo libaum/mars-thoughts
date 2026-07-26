@@ -5,13 +5,14 @@ import 'package:mars_thoughts/services/service_locator.dart';
 
 /// Core state for the app: the list of captured thoughts.
 ///
-/// Exposes a single source of truth (`thoughtsNotifier`, newest first) and
-/// derives `pinned` / `unpinned` views from it. Every mutation persists
-/// immediately — there is no save button anywhere in the app.
+/// Exposes a single source of truth (`thoughtsNotifier`, every stored thought)
+/// and derives `active` / `pinned` / `trash` views from it. Deleting a thought
+/// is non-destructive: it moves to the trash, where it can be restored or
+/// purged. Every mutation persists immediately — no save button anywhere.
 class ThoughtsManager {
   final _storage = getIt<LocalStorageService>();
 
-  /// All thoughts, sorted newest-updated first.
+  /// Every stored thought (live + trashed), sorted newest-updated first.
   late final ValueNotifier<List<Thought>> thoughtsNotifier;
 
   ThoughtsManager() {
@@ -22,9 +23,21 @@ class ThoughtsManager {
 
   List<Thought> get _thoughts => thoughtsNotifier.value;
 
-  /// Pinned thoughts, most recently pinned first.
+  /// Live thoughts (not in the trash), newest-updated first.
+  List<Thought> get active =>
+      _thoughts.where((t) => !t.isDeleted).toList();
+
+  /// Trashed thoughts, most recently deleted first.
+  List<Thought> get trash {
+    final list = _thoughts.where((t) => t.isDeleted).toList();
+    list.sort((a, b) => b.deletedAt!.compareTo(a.deletedAt!));
+    return list;
+  }
+
+  /// Pinned live thoughts, most recently pinned first.
   List<Thought> get pinned {
-    final list = _thoughts.where((t) => t.isPinned).toList();
+    final list =
+        _thoughts.where((t) => t.isPinned && !t.isDeleted).toList();
     list.sort((a, b) => b.pinnedAt!.compareTo(a.pinnedAt!));
     return list;
   }
@@ -59,8 +72,33 @@ class ThoughtsManager {
     _commit(updated);
   }
 
+  /// Moves a thought to the trash (recoverable). Unpins it on the way out so
+  /// the trash never holds pinned items.
   void delete(String id) {
+    final updated = _thoughts.map((t) {
+      if (t.id != id) return t;
+      return t.copyWith(deletedAt: DateTime.now(), clearPinned: true);
+    }).toList();
+    _commit(updated);
+  }
+
+  /// Brings a trashed thought back to life.
+  void restore(String id) {
+    final updated = _thoughts.map((t) {
+      if (t.id != id) return t;
+      return t.copyWith(clearDeleted: true);
+    }).toList();
+    _commit(updated);
+  }
+
+  /// Permanently removes a single trashed thought.
+  void purge(String id) {
     _commit(_thoughts.where((t) => t.id != id).toList());
+  }
+
+  /// Permanently removes everything in the trash.
+  void emptyTrash() {
+    _commit(_thoughts.where((t) => !t.isDeleted).toList());
   }
 
   /// Pins an unpinned thought / unpins a pinned one.

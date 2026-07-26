@@ -52,6 +52,49 @@ void main() {
       expect(Thought.fromJson(t.toJson()).pinnedAt, isNull);
       expect(t.isPinned, isFalse);
     });
+
+    test('round-trips deletedAt for trashed thoughts', () {
+      final trashed = Thought(
+        id: 'd',
+        text: 'gone',
+        createdAt: DateTime(2026),
+        updatedAt: DateTime(2026),
+        deletedAt: DateTime(2026, 6, 4, 12),
+      );
+      final restored = Thought.fromJson(trashed.toJson());
+      expect(restored.deletedAt, trashed.deletedAt);
+      expect(restored.isDeleted, isTrue);
+    });
+
+    test('legacy JSON without deletedAt loads as a live thought', () {
+      final json = {
+        'id': 'old',
+        'text': 't',
+        'createdAt': DateTime(2026).millisecondsSinceEpoch,
+        'updatedAt': DateTime(2026).millisecondsSinceEpoch,
+        'pinnedAt': null,
+      };
+      expect(Thought.fromJson(json).isDeleted, isFalse);
+    });
+  });
+
+  group('Thought.copyWith', () {
+    final t = Thought(
+      id: '1',
+      text: 'a',
+      createdAt: DateTime(2026),
+      updatedAt: DateTime(2026),
+      pinnedAt: DateTime(2026),
+      deletedAt: DateTime(2026),
+    );
+
+    test('clearDeleted restores a thought', () {
+      expect(t.copyWith(clearDeleted: true).isDeleted, isFalse);
+    });
+
+    test('clearPinned unpins a thought', () {
+      expect(t.copyWith(clearPinned: true).isPinned, isFalse);
+    });
   });
 
   group('formatThoughtTime', () {
