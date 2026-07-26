@@ -1,15 +1,17 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:mars_thoughts/domain/thought.dart';
 import 'package:mars_thoughts/logic/thoughts_manager.dart';
 import 'package:mars_thoughts/pages/settings_screen.dart';
 import 'package:mars_thoughts/pages/thought_edit_screen.dart';
-import 'package:mars_thoughts/pages/widgets/double_tap_theme_toggle.dart';
 import 'package:mars_thoughts/pages/widgets/thought_row.dart';
 import 'package:mars_thoughts/services/service_locator.dart';
 import 'package:mars_thoughts/theme/theme_constants.dart';
 
-/// Three panels: Pinned ← Write → All thoughts.
-/// The app opens on Write with the cursor blinking — capture first.
+/// Three panels: All thoughts ← Write → Pinned.
+/// The app opens on the blank Write panel — tap it to start typing. The
+/// keyboard is never raised on its own (on launch or when paging in), so
+/// arriving here stays calm rather than feeling pushy.
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
 
@@ -18,7 +20,7 @@ class MainScreen extends StatefulWidget {
 }
 
 class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
-  // PageView order: 0 = Pinned, 1 = Write (initial), 2 = All thoughts.
+  // PageView order: 0 = All thoughts, 1 = Write (initial), 2 = Pinned.
   static const _writeIndex = 1;
 
   final _manager = getIt<ThoughtsManager>();
@@ -30,6 +32,10 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
 
   int _currentPage = _writeIndex;
   String _query = '';
+
+  // Where the current touch on the Write editor went down, so a tap can be told
+  // apart from a page swipe (see [_buildWritePanel]).
+  Offset? _writeDown;
 
   @override
   void initState() {
@@ -73,22 +79,29 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   }
 
   void _onPageChanged(int index) {
+    // Leaving Write commits the draft and drops the keyboard. Arriving at Write
+    // deliberately does *not* raise the keyboard — you tap the editor when you
+    // actually want to type.
     if (_currentPage == _writeIndex && index != _writeIndex) {
       _commitDraft();
-    }
-    if (index == _writeIndex) {
-      _editorFocus.requestFocus();
-    } else {
       _editorFocus.unfocus();
     }
     setState(() => _currentPage = index);
   }
 
-  void _openThought(Thought thought) {
-    Navigator.push(
+  // Guards against a fast double-tap pushing two edit screens for the same
+  // thought — the hidden second one would later overwrite the first's save
+  // with its stale, unedited snapshot when it's popped.
+  bool _openingThought = false;
+
+  void _openThought(Thought thought) async {
+    if (_openingThought) return;
+    _openingThought = true;
+    await Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => ThoughtEditScreen(thought: thought)),
     );
+    _openingThought = false;
   }
 
   void _openSettings() {
@@ -100,25 +113,23 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
-    return DoubleTapThemeToggle(
-      child: Scaffold(
-        body: SafeArea(
-          child: Column(
-            children: [
-              Expanded(
-                child: PageView(
-                  controller: _pageController,
-                  onPageChanged: _onPageChanged,
-                  children: [
-                    _buildPinnedPanel(),
-                    _buildWritePanel(),
-                    _buildAllPanel(),
-                  ],
-                ),
+    return Scaffold(
+      body: SafeArea(
+        child: Column(
+          children: [
+            Expanded(
+              child: PageView(
+                controller: _pageController,
+                onPageChanged: _onPageChanged,
+                children: [
+                  _buildAllPanel(),
+                  _buildWritePanel(),
+                  _buildPinnedPanel(),
+                ],
               ),
-              _buildPageIndicator(),
-            ],
-          ),
+            ),
+            _buildPageIndicator(),
+          ],
         ),
       ),
     );
@@ -127,24 +138,39 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   // ── Write ────────────────────────────────────────────────────────────────
 
   Widget _buildWritePanel() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(32, 32, 32, 16),
-      child: TextField(
-        controller: _editorController,
-        focusNode: _editorFocus,
-        autofocus: true,
-        maxLines: null,
-        expands: true,
-        textAlignVertical: TextAlignVertical.top,
-        keyboardType: TextInputType.multiline,
-        textCapitalization: TextCapitalization.sentences,
-        cursorWidth: 1.5,
-        style: TEXT_STYLE_EDITOR,
-        decoration: const InputDecoration(
-          isCollapsed: true,
-          border: InputBorder.none,
-          hintText: "What's on your mind?",
-          hintStyle: TEXT_STYLE_EMPTY,
+    // A passive Listener claims nothing in the gesture arena, so it still sees a
+    // tap even right after paging in — when the settling PageView would swallow
+    // the TextField's own tap-to-focus and you'd have to tap twice. We only act
+    // on a real tap (down and up close together), never on a page swipe.
+    return Listener(
+      onPointerDown: (e) => _writeDown = e.position,
+      onPointerUp: (e) {
+        final down = _writeDown;
+        _writeDown = null;
+        if (down != null &&
+            (e.position - down).distance < kTouchSlop &&
+            !_editorFocus.hasFocus) {
+          _editorFocus.requestFocus();
+        }
+      },
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(32, 32, 32, 16),
+        child: TextField(
+          controller: _editorController,
+          focusNode: _editorFocus,
+          maxLines: null,
+          expands: true,
+          textAlignVertical: TextAlignVertical.top,
+          keyboardType: TextInputType.multiline,
+          textCapitalization: TextCapitalization.sentences,
+          cursorWidth: 1.5,
+          style: TEXT_STYLE_EDITOR,
+          decoration: const InputDecoration(
+            isCollapsed: true,
+            border: InputBorder.none,
+            hintText: "What's on your mind?",
+            hintStyle: TEXT_STYLE_EMPTY,
+          ),
         ),
       ),
     );
@@ -169,7 +195,8 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
               Expanded(
                 child: pinned.isEmpty
                     ? _emptyState('No pinned thoughts')
-                    : _thoughtList(pinned, showPinIcon: false),
+                    : _thoughtList(pinned,
+                        showPinIcon: false, allowDelete: false),
               ),
             ],
           ),
@@ -183,7 +210,8 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   Widget _buildAllPanel() {
     return ValueListenableBuilder<List<Thought>>(
       valueListenable: _manager.thoughtsNotifier,
-      builder: (context, thoughts, _) {
+      builder: (context, _, _) {
+        final thoughts = _manager.active;
         final visible = _query.isEmpty
             ? thoughts
             : thoughts
@@ -213,7 +241,8 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                     ? _emptyState('No thoughts yet')
                     : visible.isEmpty
                         ? _emptyState('Nothing found')
-                        : _thoughtList(visible, showPinIcon: true),
+                        : _thoughtList(visible,
+                            showPinIcon: true, query: _query),
               ),
             ],
           ),
@@ -224,7 +253,12 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
 
   // ── Shared list / states ─────────────────────────────────────────────────
 
-  Widget _thoughtList(List<Thought> thoughts, {required bool showPinIcon}) {
+  Widget _thoughtList(
+    List<Thought> thoughts, {
+    required bool showPinIcon,
+    bool allowDelete = true,
+    String query = '',
+  }) {
     return ListView.separated(
       keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
       padding: const EdgeInsets.only(bottom: 24),
@@ -236,9 +270,10 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
           key: ValueKey(thought.id),
           thought: thought,
           showPinIcon: showPinIcon,
+          query: query,
           onTap: () => _openThought(thought),
           onLongPress: () => _manager.togglePin(thought.id),
-          onDismissed: () => _manager.delete(thought.id),
+          onDelete: allowDelete ? () => _manager.delete(thought.id) : null,
         );
       },
     );
@@ -254,26 +289,31 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     );
   }
 
+  /// Three dots showing the current panel. Long-pressing them opens Settings —
+  /// the one entry point reachable from every panel, Write included.
   Widget _buildPageIndicator() {
     final primary = Theme.of(context).colorScheme.primary;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 14, top: 6),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: List.generate(3, (i) {
-          final active = i == _currentPage;
-          return Container(
-            width: 6,
-            height: 6,
-            margin: const EdgeInsets.symmetric(horizontal: 4),
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: active
-                  ? primary
-                  : primary.withValues(alpha: 0.2),
-            ),
-          );
-        }),
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onLongPress: _openSettings,
+      child: Padding(
+        // Generous vertical padding so the whole bottom strip is the target.
+        padding: const EdgeInsets.only(bottom: 14, top: 6),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: List.generate(3, (i) {
+            final active = i == _currentPage;
+            return Container(
+              width: 6,
+              height: 6,
+              margin: const EdgeInsets.symmetric(horizontal: 4),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: active ? primary : primary.withValues(alpha: 0.2),
+              ),
+            );
+          }),
+        ),
       ),
     );
   }
