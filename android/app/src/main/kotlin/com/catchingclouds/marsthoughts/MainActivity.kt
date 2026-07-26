@@ -1,4 +1,4 @@
-package com.catchingclouds.mars_thoughts
+package com.catchingclouds.marsthoughts
 
 import io.flutter.embedding.android.FlutterActivity
 

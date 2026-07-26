@@ -12,3 +12,10 @@ GeneratedPluginRegistrant.java
 key.properties
 **/*.keystore
 **/*.jks
+
+# Fastlane: never commit the Play service-account key or vendored gems
+fastlane/pc-api.json
+fastlane/report.xml
+fastlane/Preview.html
+/vendor/
+/.bundle/
