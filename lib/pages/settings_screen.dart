@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:mars_thoughts/pages/about_screen.dart';
-import 'package:mars_thoughts/pages/widgets/double_tap_theme_toggle.dart';
+import 'package:mars_thoughts/pages/trash_screen.dart';
+import 'package:mars_thoughts/services/service_locator.dart';
+import 'package:mars_thoughts/theme/theme_constants.dart';
+import 'package:mars_thoughts/theme/theme_manager.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -8,36 +11,56 @@ class SettingsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final primary = Theme.of(context).colorScheme.primary;
+    final themeManager = getIt<ThemeManager>();
 
-    return DoubleTapThemeToggle(
-      child: Scaffold(
-        body: SafeArea(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const SizedBox(height: 32),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 32),
-                child: Text(
-                  'Settings',
-                  style: TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.w300,
-                    color: primary,
-                  ),
+    return Scaffold(
+      body: SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SizedBox(height: 32),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 32),
+              child: Text(
+                'Settings',
+                style: TextStyle(
+                  fontSize: 28,
+                  fontWeight: FontWeight.w300,
+                  color: primary,
                 ),
               ),
-              const SizedBox(height: 40),
-              _NavRow(
-                label: 'About',
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const AboutScreen()),
-                ),
+            ),
+            const SizedBox(height: 40),
+            ValueListenableBuilder<ThemeMode>(
+              valueListenable: themeManager.themeModeNotifier,
+              builder: (context, _, _) {
+                final isDark =
+                    Theme.of(context).brightness == Brightness.dark;
+                return _NavRow(
+                  label: 'Appearance',
+                  trailing: isDark ? 'Dark' : 'Light',
+                  onTap: themeManager.toggleTheme,
+                );
+              },
+            ),
+            _Divider(),
+            _NavRow(
+              label: 'Trash',
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const TrashScreen()),
               ),
-              _Divider(),
-            ],
-          ),
+            ),
+            _Divider(),
+            _NavRow(
+              label: 'About',
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const AboutScreen()),
+              ),
+            ),
+            _Divider(),
+          ],
         ),
       ),
     );
@@ -46,9 +69,10 @@ class SettingsScreen extends StatelessWidget {
 
 class _NavRow extends StatelessWidget {
   final String label;
+  final String? trailing;
   final VoidCallback onTap;
 
-  const _NavRow({required this.label, required this.onTap});
+  const _NavRow({required this.label, required this.onTap, this.trailing});
 
   @override
   Widget build(BuildContext context) {
@@ -70,8 +94,21 @@ class _NavRow extends StatelessWidget {
                 ),
               ),
             ),
-            Icon(Icons.chevron_right,
-                size: 20, color: primary.withValues(alpha: 0.3)),
+            if (trailing != null)
+              Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: Text(
+                  trailing!,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w300,
+                    color: COLOR_SECONDARY,
+                  ),
+                ),
+              )
+            else
+              Icon(Icons.chevron_right,
+                  size: 20, color: primary.withValues(alpha: 0.3)),
           ],
         ),
       ),

@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 class LocalStorageService {
   static const _keyThoughts = 'thoughts';
   static const _keyThemeIsDark = 'theme_is_dark';
+  static const _keyEditHintSeen = 'edit_hint_seen';
 
   final SharedPreferences _prefs;
 
@@ -41,5 +42,12 @@ class LocalStorageService {
 
   Future<void> setThemeIsDark(bool isDark) async {
     await _prefs.setBool(_keyThemeIsDark, isDark);
+  }
+
+  /// Whether the "double-tap to edit" hint has already been shown once.
+  bool getEditHintSeen() => _prefs.getBool(_keyEditHintSeen) ?? false;
+
+  Future<void> setEditHintSeen() async {
+    await _prefs.setBool(_keyEditHintSeen, true);
   }
 }
