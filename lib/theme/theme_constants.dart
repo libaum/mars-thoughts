@@ -15,10 +15,28 @@ const FONT_FAMILY = 'Outfit';
 /// Text styles — fontFamily set via ThemeData, not per-style
 
 /// The writing surface (center panel + edit screen)
+// letterSpacing must be explicit: TextField merges this style onto
+// theme.textTheme.bodyLarge, while SelectableText merges it onto the
+// ambient DefaultTextStyle — those carry different default letter-spacing,
+// which drifted edit and read mode text out of horizontal alignment.
 const TEXT_STYLE_EDITOR = TextStyle(
+  fontFamily: FONT_FAMILY,
   fontSize: 18,
   fontWeight: FontWeight.w300,
   height: 1.5,
+  letterSpacing: 0,
+  wordSpacing: 0,
+);
+
+/// Explicit strut for the writing surface. TextField and SelectableText default
+/// to different strut leading, which drifted the line spacing between edit and
+/// read mode. Forcing an identical strut keeps the two pixel-aligned vertically.
+const STRUT_STYLE_EDITOR = StrutStyle(
+  fontFamily: FONT_FAMILY,
+  fontSize: 18,
+  fontWeight: FontWeight.w300,
+  height: 1.5,
+  forceStrutHeight: true,
 );
 
 /// First line of a thought in a list
