@@ -76,45 +76,45 @@ const TEXT_STYLE_EMPTY = TextStyle(
 
 /// Theme builders
 ThemeData buildLightTheme() => ThemeData(
-      colorScheme: const ColorScheme.light(
-        surface: COLOR_LIGHT_BACKGROUND,
-        primary: COLOR_LIGHT_PRIMARY,
-        brightness: Brightness.light,
-      ),
-      fontFamily: FONT_FAMILY,
-      scaffoldBackgroundColor: COLOR_LIGHT_BACKGROUND,
-      brightness: Brightness.light,
-      iconTheme: const IconThemeData(color: COLOR_LIGHT_PRIMARY),
-      textSelectionTheme: const TextSelectionThemeData(
-        cursorColor: COLOR_LIGHT_PRIMARY,
-        selectionHandleColor: COLOR_SECONDARY,
-      ),
-      textButtonTheme: TextButtonThemeData(
-        style: ButtonStyle(
-          foregroundColor: WidgetStateProperty.all<Color>(COLOR_LIGHT_PRIMARY),
-          overlayColor: WidgetStateProperty.all<Color>(Colors.transparent),
-        ),
-      ),
-    );
+  colorScheme: const ColorScheme.light(
+    surface: COLOR_LIGHT_BACKGROUND,
+    primary: COLOR_LIGHT_PRIMARY,
+    brightness: Brightness.light,
+  ),
+  fontFamily: FONT_FAMILY,
+  scaffoldBackgroundColor: COLOR_LIGHT_BACKGROUND,
+  brightness: Brightness.light,
+  iconTheme: const IconThemeData(color: COLOR_LIGHT_PRIMARY),
+  textSelectionTheme: const TextSelectionThemeData(
+    cursorColor: COLOR_LIGHT_PRIMARY,
+    selectionHandleColor: COLOR_SECONDARY,
+  ),
+  textButtonTheme: TextButtonThemeData(
+    style: ButtonStyle(
+      foregroundColor: WidgetStateProperty.all<Color>(COLOR_LIGHT_PRIMARY),
+      overlayColor: WidgetStateProperty.all<Color>(Colors.transparent),
+    ),
+  ),
+);
 
 ThemeData buildDarkTheme() => ThemeData(
-      colorScheme: const ColorScheme.dark(
-        surface: COLOR_DARK_BACKGROUND,
-        primary: COLOR_DARK_PRIMARY,
-        brightness: Brightness.dark,
-      ),
-      fontFamily: FONT_FAMILY,
-      scaffoldBackgroundColor: COLOR_DARK_BACKGROUND,
-      brightness: Brightness.dark,
-      iconTheme: const IconThemeData(color: COLOR_DARK_PRIMARY),
-      textSelectionTheme: const TextSelectionThemeData(
-        cursorColor: COLOR_DARK_PRIMARY,
-        selectionHandleColor: COLOR_SECONDARY,
-      ),
-      textButtonTheme: TextButtonThemeData(
-        style: ButtonStyle(
-          foregroundColor: WidgetStateProperty.all<Color>(COLOR_DARK_PRIMARY),
-          overlayColor: WidgetStateProperty.all<Color>(Colors.transparent),
-        ),
-      ),
-    );
+  colorScheme: const ColorScheme.dark(
+    surface: COLOR_DARK_BACKGROUND,
+    primary: COLOR_DARK_PRIMARY,
+    brightness: Brightness.dark,
+  ),
+  fontFamily: FONT_FAMILY,
+  scaffoldBackgroundColor: COLOR_DARK_BACKGROUND,
+  brightness: Brightness.dark,
+  iconTheme: const IconThemeData(color: COLOR_DARK_PRIMARY),
+  textSelectionTheme: const TextSelectionThemeData(
+    cursorColor: COLOR_DARK_PRIMARY,
+    selectionHandleColor: COLOR_SECONDARY,
+  ),
+  textButtonTheme: TextButtonThemeData(
+    style: ButtonStyle(
+      foregroundColor: WidgetStateProperty.all<Color>(COLOR_DARK_PRIMARY),
+      overlayColor: WidgetStateProperty.all<Color>(Colors.transparent),
+    ),
+  ),
+);

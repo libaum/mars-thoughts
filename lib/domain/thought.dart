@@ -52,13 +52,13 @@ class Thought {
   }
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'text': text,
-        'createdAt': createdAt.millisecondsSinceEpoch,
-        'updatedAt': updatedAt.millisecondsSinceEpoch,
-        'pinnedAt': pinnedAt?.millisecondsSinceEpoch,
-        'deletedAt': deletedAt?.millisecondsSinceEpoch,
-      };
+    'id': id,
+    'text': text,
+    'createdAt': createdAt.millisecondsSinceEpoch,
+    'updatedAt': updatedAt.millisecondsSinceEpoch,
+    'pinnedAt': pinnedAt?.millisecondsSinceEpoch,
+    'deletedAt': deletedAt?.millisecondsSinceEpoch,
+  };
 
   factory Thought.fromJson(Map<String, dynamic> json) {
     final pinnedMs = json['pinnedAt'] as int?;
@@ -68,8 +68,12 @@ class Thought {
       text: json['text'] as String,
       createdAt: DateTime.fromMillisecondsSinceEpoch(json['createdAt'] as int),
       updatedAt: DateTime.fromMillisecondsSinceEpoch(json['updatedAt'] as int),
-      pinnedAt: pinnedMs == null ? null : DateTime.fromMillisecondsSinceEpoch(pinnedMs),
-      deletedAt: deletedMs == null ? null : DateTime.fromMillisecondsSinceEpoch(deletedMs),
+      pinnedAt: pinnedMs == null
+          ? null
+          : DateTime.fromMillisecondsSinceEpoch(pinnedMs),
+      deletedAt: deletedMs == null
+          ? null
+          : DateTime.fromMillisecondsSinceEpoch(deletedMs),
     );
   }
 }

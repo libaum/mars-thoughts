@@ -24,8 +24,7 @@ class ThoughtsManager {
   List<Thought> get _thoughts => thoughtsNotifier.value;
 
   /// Live thoughts (not in the trash), newest-updated first.
-  List<Thought> get active =>
-      _thoughts.where((t) => !t.isDeleted).toList();
+  List<Thought> get active => _thoughts.where((t) => !t.isDeleted).toList();
 
   /// Trashed thoughts, most recently deleted first.
   List<Thought> get trash {
@@ -36,8 +35,7 @@ class ThoughtsManager {
 
   /// Pinned live thoughts, most recently pinned first.
   List<Thought> get pinned {
-    final list =
-        _thoughts.where((t) => t.isPinned && !t.isDeleted).toList();
+    final list = _thoughts.where((t) => t.isPinned && !t.isDeleted).toList();
     list.sort((a, b) => b.pinnedAt!.compareTo(a.pinnedAt!));
     return list;
   }

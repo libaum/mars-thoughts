@@ -14,7 +14,9 @@ class ThemeManager {
     if (isDark == null) {
       themeModeNotifier = ValueNotifier(ThemeMode.system);
     } else {
-      themeModeNotifier = ValueNotifier(isDark ? ThemeMode.dark : ThemeMode.light);
+      themeModeNotifier = ValueNotifier(
+        isDark ? ThemeMode.dark : ThemeMode.light,
+      );
     }
   }
 

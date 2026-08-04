@@ -1,16 +1,16 @@
-import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:mars_thoughts/domain/thought.dart';
 import 'package:mars_thoughts/theme/theme_constants.dart';
 import 'package:mars_thoughts/util/highlight.dart';
 import 'package:mars_thoughts/util/time_format.dart';
 
 /// One thought in a list.
-/// Tap → open, long-press → pin/unpin, swipe right → delete.
+/// Tap → open, long-press → pin/unpin, swipe right → delete, swipe left → copy.
 ///
-/// Swipe is deliberately one-directional (right only): a left swipe stays free
-/// so it can page back to the Write panel. When [onDelete] is null the row has
-/// no swipe-to-delete at all (used for the pinned list).
+/// Navigation between panels is vertical, so the row's horizontal axis is free
+/// for both swipe directions. When [onDelete] is null the row has no swipe
+/// actions at all (used for the pinned list, which unpins instead).
 ///
 /// When [query] is set the row shows the matching part of the thought with the
 /// query highlighted, so a search result is recognisable at a glance.
@@ -116,133 +116,124 @@ class ThoughtRow extends StatelessWidget {
       ),
     );
 
-    // No delete here (e.g. pinned list) → plain row, both swipes free for paging.
+    // No delete here (e.g. pinned list) → plain row, no swipe actions.
     if (onDelete == null) return content;
 
-    return _SwipeToDelete(onDelete: onDelete!, child: content);
-  }
-}
-
-/// Swipe a row to the right to delete it. Unlike `Dismissible`, it only ever
-/// claims *rightward* drags in the gesture arena — a leftward drag is rejected
-/// and falls through to the parent `PageView`, so the list stays swipeable to
-/// the Write panel.
-class _SwipeToDelete extends StatefulWidget {
-  final Widget child;
-  final VoidCallback onDelete;
-
-  const _SwipeToDelete({required this.child, required this.onDelete});
-
-  @override
-  State<_SwipeToDelete> createState() => _SwipeToDeleteState();
-}
-
-class _SwipeToDeleteState extends State<_SwipeToDelete> {
-  static const _maxReveal = 180.0;
-  static const _threshold = 96.0;
-
-  double _drag = 0;
-
-  void _onUpdate(DragUpdateDetails d) {
-    setState(() => _drag = (_drag + d.delta.dx).clamp(0.0, _maxReveal));
-  }
-
-  void _onEnd(DragEndDetails d) {
-    final delete = _drag >= _threshold;
-    setState(() => _drag = 0);
-    if (delete) widget.onDelete();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return RawGestureDetector(
-      behavior: HitTestBehavior.opaque,
-      gestures: <Type, GestureRecognizerFactory>{
-        _RightwardDragRecognizer:
-            GestureRecognizerFactoryWithHandlers<_RightwardDragRecognizer>(
-          () => _RightwardDragRecognizer(),
-          (instance) => instance
-            ..onUpdate = _onUpdate
-            ..onEnd = _onEnd,
-        ),
-      },
-      child: Stack(
-        children: [
-          if (_drag > 0)
-            Positioned.fill(
-              child: Opacity(
-                opacity: (_drag / _threshold).clamp(0.0, 1.0),
-                child: const _DeleteHint(),
-              ),
-            ),
-          Transform.translate(
-            offset: Offset(_drag, 0),
-            child: widget.child,
-          ),
-        ],
-      ),
+    return _SwipeActions(
+      onDelete: onDelete!,
+      // No extra haptic here — hitting the stop already ticked.
+      onCopy: () => Clipboard.setData(ClipboardData(text: thought.text)),
+      child: content,
     );
   }
 }
 
-/// A horizontal-drag recognizer that bows out the moment a drag heads left, so
-/// the enclosing `PageView` wins leftward swipes while we keep rightward ones.
-class _RightwardDragRecognizer extends HorizontalDragGestureRecognizer {
-  Offset? _origin;
+/// Swipe a row right to delete it, left to copy its text to the clipboard.
+class _SwipeActions extends StatefulWidget {
+  final Widget child;
+  final VoidCallback onDelete;
+  final VoidCallback onCopy;
+
+  const _SwipeActions({
+    required this.child,
+    required this.onDelete,
+    required this.onCopy,
+  });
 
   @override
-  void addAllowedPointer(PointerDownEvent event) {
-    _origin = event.position;
-    super.addAllowedPointer(event);
-  }
-
-  @override
-  void handleEvent(PointerEvent event) {
-    if (event is PointerMoveEvent && _origin != null) {
-      final dx = event.position.dx - _origin!.dx;
-      // A drag heading left belongs to the PageView — bow out.
-      if (dx < -kTouchSlop) {
-        resolve(GestureDisposition.rejected);
-        stopTrackingPointer(event.pointer);
-        return;
-      }
-      // A clear rightward drag is ours: claim the arena now so it wins over
-      // the enclosing PageView's own horizontal drag (which otherwise ties and
-      // often swallows the swipe, making delete feel broken).
-      if (dx > kTouchSlop) {
-        resolve(GestureDisposition.accepted);
-      }
-    }
-    super.handleEvent(event);
-  }
+  State<_SwipeActions> createState() => _SwipeActionsState();
 }
 
-/// Quiet delete affordance revealed behind a row swiped to the right.
-class _DeleteHint extends StatelessWidget {
-  const _DeleteHint();
+class _SwipeActionsState extends State<_SwipeActions> {
+  /// How far a row may travel, as a fraction of its width.
+  static const _maxRevealFraction = 1 / 3;
+  static const _iconSize = 20.0;
+
+  /// Set from the LayoutBuilder below — the travel limit is width-relative.
+  double _maxReveal = 0;
+
+  double _drag = 0;
+
+  /// True once the row is pulled all the way to the stop. Only then does
+  /// releasing it do anything — a half-hearted swipe is always a no-op, so
+  /// nothing is ever deleted by a hesitant thumb. Hitting the stop ticks once
+  /// so you can feel that the action is loaded without looking.
+  bool _armed = false;
+
+  void _onUpdate(DragUpdateDetails d) {
+    final drag = (_drag + d.delta.dx).clamp(-_maxReveal, _maxReveal);
+    final armed = _maxReveal > 0 && drag.abs() >= _maxReveal - 0.5;
+    if (armed && !_armed) HapticFeedback.mediumImpact();
+    setState(() {
+      _drag = drag;
+      _armed = armed;
+    });
+  }
+
+  void _onEnd(DragEndDetails d) {
+    final delete = _armed && _drag > 0;
+    final copy = _armed && _drag < 0;
+    setState(() {
+      _drag = 0;
+      _armed = false;
+    });
+    if (delete) widget.onDelete();
+    if (copy) widget.onCopy();
+  }
 
   @override
   Widget build(BuildContext context) {
-    return const Padding(
-      padding: EdgeInsets.symmetric(horizontal: 32),
-      child: Align(
-        alignment: Alignment.centerLeft,
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.delete_outline, size: 16, color: COLOR_SECONDARY),
-            SizedBox(width: 8),
-            Text(
-              'Delete',
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w300,
-                color: COLOR_SECONDARY,
+    // The row reads as a tile in the background colour. Swiping it aside
+    // uncovers an inverted tile filling exactly the strip it vacated.
+    final tile = Theme.of(context).scaffoldBackgroundColor;
+    final reveal = Theme.of(context).colorScheme.primary;
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        _maxReveal = constraints.maxWidth * _maxRevealFraction;
+        return GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onHorizontalDragUpdate: _onUpdate,
+          onHorizontalDragEnd: _onEnd,
+          child: Stack(
+            children: [
+              if (_drag != 0)
+                Positioned(
+                  // Flush with the edge the row started at, so the two tiles
+                  // meet without a seam.
+                  left: _drag > 0 ? 0 : null,
+                  right: _drag < 0 ? 0 : null,
+                  top: 0,
+                  bottom: 0,
+                  width: _drag.abs(),
+                  child: ClipRect(
+                    child: ColoredBox(
+                      color: reveal,
+                      // OverflowBox keeps the icon at full size and centred in
+                      // the strip, so early in a swipe it is cut off by the
+                      // strip's edges rather than squeezed into it.
+                      child: OverflowBox(
+                        minWidth: 0,
+                        maxWidth: double.infinity,
+                        child: Icon(
+                          _drag > 0
+                              ? Icons.delete_outline
+                              : Icons.copy_outlined,
+                          size: _iconSize,
+                          color: tile,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              Transform.translate(
+                offset: Offset(_drag, 0),
+                child: ColoredBox(color: tile, child: widget.child),
               ),
-            ),
-          ],
-        ),
-      ),
+            ],
+          ),
+        );
+      },
     );
   }
 }

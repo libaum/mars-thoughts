@@ -10,8 +10,18 @@ String formatThoughtTime(DateTime time, {DateTime? now}) {
   if (diff.inDays < 7) return '${diff.inDays}d';
 
   const months = [
-    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
   ];
   final monthName = months[time.month - 1];
   if (time.year == reference.year) return '$monthName ${time.day}';

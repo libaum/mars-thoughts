@@ -23,9 +23,7 @@ List<TextSpan> highlightSpans(
       break;
     }
     if (index > start) {
-      spans.add(
-        TextSpan(text: text.substring(start, index), style: baseStyle),
-      );
+      spans.add(TextSpan(text: text.substring(start, index), style: baseStyle));
     }
     spans.add(
       TextSpan(

@@ -62,8 +62,10 @@ class TrashScreen extends StatelessWidget {
                           padding: EdgeInsets.symmetric(horizontal: 32),
                           child: Align(
                             alignment: Alignment.topLeft,
-                            child: Text('Trash is empty',
-                                style: TEXT_STYLE_EMPTY),
+                            child: Text(
+                              'Trash is empty',
+                              style: TEXT_STYLE_EMPTY,
+                            ),
                           ),
                         )
                       : ListView.separated(

@@ -32,14 +32,14 @@ class MarsThoughts extends StatelessWidget {
           // Runs below the theme, so `system` mode is resolved correctly here.
           builder: (context, child) {
             final isDark = Theme.of(context).brightness == Brightness.dark;
-            final iconBrightness =
-                isDark ? Brightness.light : Brightness.dark;
+            final iconBrightness = isDark ? Brightness.light : Brightness.dark;
             return AnnotatedRegion<SystemUiOverlayStyle>(
               value: SystemUiOverlayStyle(
                 statusBarColor: Colors.transparent,
                 statusBarIconBrightness: iconBrightness,
-                statusBarBrightness:
-                    isDark ? Brightness.dark : Brightness.light,
+                statusBarBrightness: isDark
+                    ? Brightness.dark
+                    : Brightness.light,
                 systemNavigationBarColor: Colors.transparent,
                 systemNavigationBarDividerColor: Colors.transparent,
                 systemNavigationBarIconBrightness: iconBrightness,
