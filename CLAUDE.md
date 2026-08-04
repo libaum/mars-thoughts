@@ -90,9 +90,11 @@ Follows the shared Mars conventions (see ../DESIGN.md). Reference app: ../mars_f
 - **Write panel**: a single full-screen `TextField`. The draft **stays put**
   when you move between panels — look something up and come back to your
   half-written thought. It is only filed away as a new thought by the
-  **`+` button** (bottom right, fades in once the draft is non-empty) or by
-  backgrounding the app. So: within a session the draft survives everything,
-  across sessions never — every launch starts blank. See `_commitDraft`.
+  **`+` button** (bottom right, fades in once the draft is non-empty), never by
+  backgrounding the app — switching away and back leaves it untouched. So:
+  within a session the draft survives everything, across sessions never —
+  every launch starts blank because the draft lives only in memory. See
+  `_commitDraft`.
 - **Tap** a thought → `ThoughtReadScreen`, which is **read-only**: the text is
   shown as `SelectableText` (no keyboard) so you can read or select/copy via
   the native selection toolbar. **Pull down** past the top or **swipe left**

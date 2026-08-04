@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:mars_thoughts/data/local_storage_service.dart';
@@ -28,7 +30,7 @@ class MainScreen extends StatefulWidget {
 }
 
 class _MainScreenState extends State<MainScreen>
-    with WidgetsBindingObserver, SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin {
   final _manager = getIt<ThoughtsManager>();
   final _storage = getIt<LocalStorageService>();
 
@@ -52,6 +54,10 @@ class _MainScreenState extends State<MainScreen>
   /// very same field, so every gesture here works the same either way.
   String? _editingId;
 
+  // Persists the draft to disk a little after typing settles, so an OS kill
+  // in the background can't lose it — but not on every keystroke.
+  Timer? _draftSaveTimer;
+
   // Overscroll accounting for closing an open panel back to Write, mirroring
   // ThoughtReadScreen's pull-down-to-dismiss.
   double _allOverscroll = 0;
@@ -70,13 +76,15 @@ class _MainScreenState extends State<MainScreen>
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addObserver(this);
     _navController = AnimationController(
       vsync: this,
       lowerBound: -1,
       upperBound: 1,
       value: 0,
     );
+    _editingId = _storage.getDraftEditingId();
+    _editorController.text = _storage.getDraftText();
+    _editorController.addListener(_scheduleDraftSave);
     _searchController.addListener(() {
       setState(() => _query = _searchController.text.trim().toLowerCase());
     });
@@ -84,9 +92,7 @@ class _MainScreenState extends State<MainScreen>
 
   @override
   void dispose() {
-    // No commit here: didChangeAppLifecycleState already files the draft on
-    // pause, and notifying the manager during tree finalization is unsafe.
-    WidgetsBinding.instance.removeObserver(this);
+    _draftSaveTimer?.cancel();
     _navController.dispose();
     _editorController.dispose();
     _editorScroll.dispose();
@@ -95,20 +101,19 @@ class _MainScreenState extends State<MainScreen>
     super.dispose();
   }
 
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    // Leaving the app files the draft away — open, type, close, done. That is
-    // also what makes every launch start on a blank page: within a session the
-    // draft survives everything, across sessions it never does.
-    if (state == AppLifecycleState.paused ||
-        state == AppLifecycleState.hidden) {
-      _commitDraft();
-    }
+  /// Debounced so a fast typist doesn't hit SharedPreferences on every
+  /// keystroke — only once things settle for a moment.
+  void _scheduleDraftSave() {
+    _draftSaveTimer?.cancel();
+    _draftSaveTimer = Timer(const Duration(milliseconds: 400), () {
+      _storage.setDraft(_editorController.text, _editingId);
+    });
   }
 
   /// Files whatever is in the editor away and clears it — writing back to the
-  /// thought being edited, or creating a new one. Called on leaving the app
-  /// and from the new-thought button, never just from moving between panels.
+  /// thought being edited, or creating a new one. Called from the new-thought
+  /// button and when switching to editing another thought, never just from
+  /// moving between panels or leaving the app.
   void _commitDraft() {
     final id = _editingId;
     final text = _editorController.text;
@@ -122,6 +127,8 @@ class _MainScreenState extends State<MainScreen>
     if (_editorController.text.isNotEmpty) {
       _editorController.clear();
     }
+    _draftSaveTimer?.cancel();
+    _storage.clearDraft();
   }
 
   /// Writes an in-progress edit back without ending it, so the list you swipe
@@ -129,6 +136,8 @@ class _MainScreenState extends State<MainScreen>
   /// for `+`; an emptied thought waits too, so passing through the list can't
   /// silently trash it mid-edit.
   void _saveInPlace() {
+    _draftSaveTimer?.cancel();
+    _storage.setDraft(_editorController.text, _editingId);
     final id = _editingId;
     if (id == null || _editorController.text.trim().isEmpty) return;
     _manager.update(id, _editorController.text);

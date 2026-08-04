@@ -9,6 +9,8 @@ class LocalStorageService {
   static const _keyThemeIsDark = 'theme_is_dark';
   static const _keyEditHintSeen = 'edit_hint_seen';
   static const _keySettingsHintSeen = 'settings_hint_seen';
+  static const _keyDraftText = 'draft_text';
+  static const _keyDraftEditingId = 'draft_editing_id';
 
   final SharedPreferences _prefs;
 
@@ -57,5 +59,27 @@ class LocalStorageService {
 
   Future<void> setSettingsHintSeen() async {
     await _prefs.setBool(_keySettingsHintSeen, true);
+  }
+
+  /// The write panel's not-yet-filed-away draft, kept outside the thoughts
+  /// list so it survives the process being killed in the background without
+  /// showing up as a saved thought. `editingId` is set when the draft is an
+  /// in-progress edit of an existing thought rather than a brand-new one.
+  String getDraftText() => _prefs.getString(_keyDraftText) ?? '';
+
+  String? getDraftEditingId() => _prefs.getString(_keyDraftEditingId);
+
+  Future<void> setDraft(String text, String? editingId) async {
+    await _prefs.setString(_keyDraftText, text);
+    if (editingId == null) {
+      await _prefs.remove(_keyDraftEditingId);
+    } else {
+      await _prefs.setString(_keyDraftEditingId, editingId);
+    }
+  }
+
+  Future<void> clearDraft() async {
+    await _prefs.remove(_keyDraftText);
+    await _prefs.remove(_keyDraftEditingId);
   }
 }
