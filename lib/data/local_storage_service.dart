@@ -11,6 +11,7 @@ class LocalStorageService {
   static const _keySettingsHintSeen = 'settings_hint_seen';
   static const _keyDraftText = 'draft_text';
   static const _keyDraftEditingId = 'draft_editing_id';
+  static const _keyTutorialSeen = 'tutorial_seen';
 
   final SharedPreferences _prefs;
 
@@ -81,5 +82,12 @@ class LocalStorageService {
   Future<void> clearDraft() async {
     await _prefs.remove(_keyDraftText);
     await _prefs.remove(_keyDraftEditingId);
+  }
+
+  /// Whether the first-launch tutorial draft has already been seeded once.
+  bool getTutorialSeen() => _prefs.getBool(_keyTutorialSeen) ?? false;
+
+  Future<void> setTutorialSeen() async {
+    await _prefs.setBool(_keyTutorialSeen, true);
   }
 }

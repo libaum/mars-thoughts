@@ -47,6 +47,15 @@ class _MainScreenState extends State<MainScreen>
   static const _openThreshold = 0.35;
   static const _flingVelocity = 700.0;
 
+  static const _tutorialText =
+      "Welcome to Mars Thoughts.\n\n"
+      "Just start typing — there's no save button, this is already saved.\n\n"
+      "Swipe up for all your thoughts, swipe down for pinned ones — keep "
+      "pulling down past Pinned to reach Settings.\n\n"
+      "On a thought: swipe right to delete, swipe left to copy, long-press "
+      "to pin. Tap to open it, then double-tap the text to edit.\n\n"
+      "Tap + when you're ready to file this away and start fresh.";
+
   String _query = '';
 
   /// The thought currently loaded into the write panel, if any. `null` means
@@ -83,7 +92,17 @@ class _MainScreenState extends State<MainScreen>
       value: 0,
     );
     _editingId = _storage.getDraftEditingId();
-    _editorController.text = _storage.getDraftText();
+    final draft = _storage.getDraftText();
+    if (draft.isNotEmpty) {
+      _editorController.text = draft;
+    } else if (_manager.active.isEmpty && !_storage.getTutorialSeen()) {
+      // Nothing saved yet and nothing typed yet: this is a fresh install, so
+      // seed the editor with a short tutorial instead of leaving it blank. It
+      // behaves exactly like any other draft from here on — overwritten by
+      // typing, filed away by `+`, or left as-is.
+      _editorController.text = _tutorialText;
+      _storage.setTutorialSeen();
+    }
     _editorController.addListener(_scheduleDraftSave);
     _searchController.addListener(() {
       setState(() => _query = _searchController.text.trim().toLowerCase());
