@@ -6,7 +6,7 @@ import 'package:mars_thoughts/util/highlight.dart';
 import 'package:mars_thoughts/util/time_format.dart';
 
 /// One thought in a list.
-/// Tap → open, long-press → pin/unpin, swipe right → delete, swipe left → copy.
+/// Tap → open, long-press → pin/unpin, swipe left → delete, swipe right → copy.
 ///
 /// Navigation between panels is vertical, so the row's horizontal axis is free
 /// for both swipe directions. When [onDelete] is null the row has no swipe
@@ -128,7 +128,7 @@ class ThoughtRow extends StatelessWidget {
   }
 }
 
-/// Swipe a row right to delete it, left to copy its text to the clipboard.
+/// Swipe a row left to delete it, right to copy its text to the clipboard.
 class _SwipeActions extends StatefulWidget {
   final Widget child;
   final VoidCallback onDelete;
@@ -171,8 +171,8 @@ class _SwipeActionsState extends State<_SwipeActions> {
   }
 
   void _onEnd(DragEndDetails d) {
-    final delete = _armed && _drag > 0;
-    final copy = _armed && _drag < 0;
+    final delete = _armed && _drag < 0;
+    final copy = _armed && _drag > 0;
     setState(() {
       _drag = 0;
       _armed = false;
@@ -184,9 +184,12 @@ class _SwipeActionsState extends State<_SwipeActions> {
   @override
   Widget build(BuildContext context) {
     // The row reads as a tile in the background colour. Swiping it aside
-    // uncovers an inverted tile filling exactly the strip it vacated.
+    // uncovers an inverted tile filling exactly the strip it vacated —
+    // delete tints red, copy stays in the neutral primary colour.
     final tile = Theme.of(context).scaffoldBackgroundColor;
-    final reveal = Theme.of(context).colorScheme.primary;
+    final reveal = _drag < 0
+        ? COLOR_DELETE
+        : Theme.of(context).colorScheme.primary;
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -216,7 +219,7 @@ class _SwipeActionsState extends State<_SwipeActions> {
                         minWidth: 0,
                         maxWidth: double.infinity,
                         child: Icon(
-                          _drag > 0
+                          _drag < 0
                               ? Icons.delete_outline
                               : Icons.copy_outlined,
                           size: _iconSize,
