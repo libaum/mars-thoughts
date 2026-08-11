@@ -39,7 +39,7 @@ class AboutScreen extends StatelessWidget {
                 const SizedBox(height: 32),
                 // This app — personal "why" + the single idea.
                 Text(
-                  'I kept losing thoughts. A notes app always wanted a title, a folder, a place to file the thing before I\'d even written it, and by then the thought was gone. So I built the opposite: an app that opens straight to a blank page.',
+                  'I kept losing thoughts. Every notes app wanted a title, a folder, a place to file the thing before I\'d even written it — and by then the thought was gone.',
                   style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w300,
@@ -49,7 +49,17 @@ class AboutScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 24),
                 Text(
-                  'Open, type, close. It saves itself. No titles, no folders, no save button. Just somewhere for a thought to land before it disappears.',
+                  'So I built the opposite: an app that opens straight to writing. No setup, no deciding where anything goes. Somewhere for a thought to land before it slips away.',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w300,
+                    color: primary,
+                    height: 1.7,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                Text(
+                  'I built it because I wanted it myself, and I use it every day.',
                   style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w300,
@@ -65,7 +75,7 @@ class AboutScreen extends StatelessWidget {
                 const SizedBox(height: 32),
                 // About Mars — shared philosophy, identical across all apps.
                 const Text(
-                  'Mars — Minimalist And Really Simple. A growing family of small, calm tools built around one idea: solve one problem well, and never fight for your attention. Created by one person out of passion and conviction. Forever open source. No ads. No tracking.',
+                  'Mars — Minimalist And Really Simple. A growing family of small, calm tools built around one idea: solve one problem well, and never fight for your attention. No ads, no tracking, nothing built to keep you hooked. Made by one person, out of conviction — tools that work for you, not on you.',
                   style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w300,
