@@ -64,9 +64,9 @@ class ShowcaseDataSource {
       Thought(
         id: 'showcase-5',
         text:
-            "Manifesto note:\nPeople aren't weak, they're unarmed. The systems "
-            "are engineered to win. Willpower against a billion-dollar "
-            "budget — that's not a fair fight.",
+            "People aren't weak, they're unarmed. The systems are "
+            "engineered to win. Willpower against a billion-dollar budget "
+            "— that's not a fair fight.",
         createdAt: t2d,
         updatedAt: t2d,
         pinnedAt: ago(const Duration(days: 2, hours: 1)),
