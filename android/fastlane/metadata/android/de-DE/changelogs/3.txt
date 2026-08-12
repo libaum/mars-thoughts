@@ -1,0 +1,6 @@
+Erste öffentliche Version.
+
+- Gedanken ohne Umwege festhalten — tippen, schreiben, fertig
+- Anheften, Suchen, Papierkorb mit Wiederherstellen
+- Mehrfachauswahl, Wischen zum Löschen oder Kopieren
+- Helles/dunkles Design und anpassbare Hintergrundfarbe

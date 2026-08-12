@@ -1,0 +1,6 @@
+First public release.
+
+- Capture thoughts with zero friction — tap, type, done
+- Pin, search, and trash with restore
+- Multi-select, swipe to delete or copy
+- Light/dark theme and custom background color
