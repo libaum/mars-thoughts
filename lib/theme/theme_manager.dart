@@ -9,6 +9,9 @@ class ThemeManager {
 
   late final ValueNotifier<ThemeMode> themeModeNotifier;
 
+  late final ValueNotifier<Color> lightBackgroundNotifier;
+  late final ValueNotifier<Color> darkBackgroundNotifier;
+
   ThemeManager() {
     final isDark = _storage.getThemeIsDark();
     // No preference yet (fresh install): default to dark rather than
@@ -16,6 +19,15 @@ class ThemeManager {
     // user explicitly switches it.
     themeModeNotifier = ValueNotifier(
       isDark ?? true ? ThemeMode.dark : ThemeMode.light,
+    );
+
+    final lightArgb = _storage.getLightBackground();
+    lightBackgroundNotifier = ValueNotifier(
+      lightArgb == null ? COLOR_LIGHT_BACKGROUND : Color(lightArgb),
+    );
+    final darkArgb = _storage.getDarkBackground();
+    darkBackgroundNotifier = ValueNotifier(
+      darkArgb == null ? COLOR_DARK_BACKGROUND : Color(darkArgb),
     );
   }
 
@@ -29,6 +41,18 @@ class ThemeManager {
     _storage.setThemeIsDark(themeModeNotifier.value == ThemeMode.dark);
   }
 
-  ThemeData get lightTheme => buildLightTheme();
-  ThemeData get darkTheme => buildDarkTheme();
+  void setLightBackground(Color? color) {
+    lightBackgroundNotifier.value = color ?? COLOR_LIGHT_BACKGROUND;
+    _storage.setLightBackground(color?.toARGB32());
+  }
+
+  void setDarkBackground(Color? color) {
+    darkBackgroundNotifier.value = color ?? COLOR_DARK_BACKGROUND;
+    _storage.setDarkBackground(color?.toARGB32());
+  }
+
+  ThemeData get lightTheme =>
+      buildLightTheme(background: lightBackgroundNotifier.value);
+  ThemeData get darkTheme =>
+      buildDarkTheme(background: darkBackgroundNotifier.value);
 }

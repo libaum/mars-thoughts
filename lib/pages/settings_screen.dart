@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:mars_thoughts/data/local_storage_service.dart';
 import 'package:mars_thoughts/pages/about_screen.dart';
+import 'package:mars_thoughts/pages/dialogs/background_color_dialog.dart';
 import 'package:mars_thoughts/pages/trash_screen.dart';
 import 'package:mars_thoughts/services/service_locator.dart';
 import 'package:mars_thoughts/theme/theme_constants.dart';
@@ -54,6 +55,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 label: 'Appearance',
                 trailing: isDark ? 'Dark' : 'Light',
                 onTap: themeManager.toggleTheme,
+              );
+            },
+          ),
+          ValueListenableBuilder<ThemeMode>(
+            valueListenable: themeManager.themeModeNotifier,
+            builder: (context, _, _) {
+              final isDark = Theme.of(context).brightness == Brightness.dark;
+              return _NavRow(
+                label: 'Background color',
+                onTap: () => showDialog(
+                  context: context,
+                  builder: (_) => BackgroundColorDialog(isDark: isDark),
+                ),
               );
             },
           ),

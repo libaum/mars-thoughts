@@ -10,6 +10,23 @@ const COLOR_DARK_PRIMARY = Colors.white;
 const COLOR_SECONDARY = Color(0xFF888888);
 const COLOR_DELETE = Color(0xFFC9184A);
 
+/// Background color presets offered in Settings → Appearance, kept muted
+/// and calm rather than saturated — Mars stays quiet even with a tint.
+const List<Color> LIGHT_BACKGROUND_PRESETS = [
+  Color(0xFFF3E4C8), // sand
+  Color(0xFFD9E8DA), // sage
+  Color(0xFFD6E4F0), // powder blue
+  Color(0xFFF0DCE0), // blush
+  Color(0xFFE3DCF0), // lavender
+];
+const List<Color> DARK_BACKGROUND_PRESETS = [
+  Color(0xFF141C29), // navy
+  Color(0xFF231A2C), // plum
+  Color(0xFF0F2429), // teal
+  Color(0xFF2A121B), // burgundy
+  Color(0xFF291712), // rust
+];
+
 /// Font
 const FONT_FAMILY = 'Outfit';
 
@@ -75,47 +92,52 @@ const TEXT_STYLE_EMPTY = TextStyle(
   color: COLOR_SECONDARY,
 );
 
-/// Theme builders
-ThemeData buildLightTheme() => ThemeData(
-  colorScheme: const ColorScheme.light(
-    surface: COLOR_LIGHT_BACKGROUND,
-    primary: COLOR_LIGHT_PRIMARY,
-    brightness: Brightness.light,
-  ),
-  fontFamily: FONT_FAMILY,
-  scaffoldBackgroundColor: COLOR_LIGHT_BACKGROUND,
-  brightness: Brightness.light,
-  iconTheme: const IconThemeData(color: COLOR_LIGHT_PRIMARY),
-  textSelectionTheme: const TextSelectionThemeData(
-    cursorColor: COLOR_LIGHT_PRIMARY,
-    selectionHandleColor: COLOR_SECONDARY,
-  ),
-  textButtonTheme: TextButtonThemeData(
-    style: ButtonStyle(
-      foregroundColor: WidgetStateProperty.all<Color>(COLOR_LIGHT_PRIMARY),
-      overlayColor: WidgetStateProperty.all<Color>(Colors.transparent),
-    ),
-  ),
-);
+/// Theme builders. `background` lets Settings → Appearance swap in a custom
+/// background color; text/icon colors stay pure black/white regardless.
+ThemeData buildLightTheme({Color background = COLOR_LIGHT_BACKGROUND}) =>
+    ThemeData(
+      colorScheme: ColorScheme.light(
+        surface: background,
+        primary: COLOR_LIGHT_PRIMARY,
+        brightness: Brightness.light,
+      ),
+      fontFamily: FONT_FAMILY,
+      scaffoldBackgroundColor: background,
+      brightness: Brightness.light,
+      iconTheme: const IconThemeData(color: COLOR_LIGHT_PRIMARY),
+      textSelectionTheme: const TextSelectionThemeData(
+        cursorColor: COLOR_LIGHT_PRIMARY,
+        selectionHandleColor: COLOR_SECONDARY,
+      ),
+      textButtonTheme: TextButtonThemeData(
+        style: ButtonStyle(
+          foregroundColor: WidgetStateProperty.all<Color>(
+            COLOR_LIGHT_PRIMARY,
+          ),
+          overlayColor: WidgetStateProperty.all<Color>(Colors.transparent),
+        ),
+      ),
+    );
 
-ThemeData buildDarkTheme() => ThemeData(
-  colorScheme: const ColorScheme.dark(
-    surface: COLOR_DARK_BACKGROUND,
-    primary: COLOR_DARK_PRIMARY,
-    brightness: Brightness.dark,
-  ),
-  fontFamily: FONT_FAMILY,
-  scaffoldBackgroundColor: COLOR_DARK_BACKGROUND,
-  brightness: Brightness.dark,
-  iconTheme: const IconThemeData(color: COLOR_DARK_PRIMARY),
-  textSelectionTheme: const TextSelectionThemeData(
-    cursorColor: COLOR_DARK_PRIMARY,
-    selectionHandleColor: COLOR_SECONDARY,
-  ),
-  textButtonTheme: TextButtonThemeData(
-    style: ButtonStyle(
-      foregroundColor: WidgetStateProperty.all<Color>(COLOR_DARK_PRIMARY),
-      overlayColor: WidgetStateProperty.all<Color>(Colors.transparent),
-    ),
-  ),
-);
+ThemeData buildDarkTheme({Color background = COLOR_DARK_BACKGROUND}) =>
+    ThemeData(
+      colorScheme: ColorScheme.dark(
+        surface: background,
+        primary: COLOR_DARK_PRIMARY,
+        brightness: Brightness.dark,
+      ),
+      fontFamily: FONT_FAMILY,
+      scaffoldBackgroundColor: background,
+      brightness: Brightness.dark,
+      iconTheme: const IconThemeData(color: COLOR_DARK_PRIMARY),
+      textSelectionTheme: const TextSelectionThemeData(
+        cursorColor: COLOR_DARK_PRIMARY,
+        selectionHandleColor: COLOR_SECONDARY,
+      ),
+      textButtonTheme: TextButtonThemeData(
+        style: ButtonStyle(
+          foregroundColor: WidgetStateProperty.all<Color>(COLOR_DARK_PRIMARY),
+          overlayColor: WidgetStateProperty.all<Color>(Colors.transparent),
+        ),
+      ),
+    );

@@ -21,34 +21,48 @@ class MarsThoughts extends StatelessWidget {
     return ValueListenableBuilder<ThemeMode>(
       valueListenable: themeManager.themeModeNotifier,
       builder: (context, themeMode, _) {
-        return MaterialApp(
-          debugShowCheckedModeBanner: false,
-          title: 'Mars Thoughts',
-          theme: themeManager.lightTheme,
-          darkTheme: themeManager.darkTheme,
-          themeMode: themeMode,
-          // Make the Android status & navigation bars follow the resolved theme
-          // (black on dark, white on light) instead of staying a stray grey.
-          // Runs below the theme, so `system` mode is resolved correctly here.
-          builder: (context, child) {
-            final isDark = Theme.of(context).brightness == Brightness.dark;
-            final iconBrightness = isDark ? Brightness.light : Brightness.dark;
-            return AnnotatedRegion<SystemUiOverlayStyle>(
-              value: SystemUiOverlayStyle(
-                statusBarColor: Colors.transparent,
-                statusBarIconBrightness: iconBrightness,
-                statusBarBrightness: isDark
-                    ? Brightness.dark
-                    : Brightness.light,
-                systemNavigationBarColor: Colors.transparent,
-                systemNavigationBarDividerColor: Colors.transparent,
-                systemNavigationBarIconBrightness: iconBrightness,
-                systemNavigationBarContrastEnforced: false,
-              ),
-              child: child!,
+        return ValueListenableBuilder<Color>(
+          valueListenable: themeManager.lightBackgroundNotifier,
+          builder: (context, _, _) {
+            return ValueListenableBuilder<Color>(
+              valueListenable: themeManager.darkBackgroundNotifier,
+              builder: (context, _, _) {
+                return MaterialApp(
+                  debugShowCheckedModeBanner: false,
+                  title: 'Mars Thoughts',
+                  theme: themeManager.lightTheme,
+                  darkTheme: themeManager.darkTheme,
+                  themeMode: themeMode,
+                  // Make the Android status & navigation bars follow the
+                  // resolved theme (black on dark, white on light) instead of
+                  // staying a stray grey. Runs below the theme, so `system`
+                  // mode is resolved correctly here.
+                  builder: (context, child) {
+                    final isDark =
+                        Theme.of(context).brightness == Brightness.dark;
+                    final iconBrightness = isDark
+                        ? Brightness.light
+                        : Brightness.dark;
+                    return AnnotatedRegion<SystemUiOverlayStyle>(
+                      value: SystemUiOverlayStyle(
+                        statusBarColor: Colors.transparent,
+                        statusBarIconBrightness: iconBrightness,
+                        statusBarBrightness: isDark
+                            ? Brightness.dark
+                            : Brightness.light,
+                        systemNavigationBarColor: Colors.transparent,
+                        systemNavigationBarDividerColor: Colors.transparent,
+                        systemNavigationBarIconBrightness: iconBrightness,
+                        systemNavigationBarContrastEnforced: false,
+                      ),
+                      child: child!,
+                    );
+                  },
+                  home: const MainScreen(),
+                );
+              },
             );
           },
-          home: const MainScreen(),
         );
       },
     );

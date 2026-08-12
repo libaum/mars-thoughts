@@ -12,6 +12,8 @@ class LocalStorageService {
   static const _keyDraftEditingId = 'draft_editing_id';
   static const _keyTutorialSeen = 'tutorial_seen';
   static const _keyAnimationsEnabled = 'animations_enabled';
+  static const _keyLightBackground = 'light_background';
+  static const _keyDarkBackground = 'dark_background';
 
   final SharedPreferences _prefs;
 
@@ -84,12 +86,34 @@ class LocalStorageService {
     await _prefs.setBool(_keyTutorialSeen, true);
   }
 
-  /// Placeholder for a future screen-transition animation — currently has no
-  /// effect, since the transition itself is a plain cut. Defaults off.
+  /// Whether panel drags follow the finger live instead of cutting straight
+  /// to the result once the gesture resolves. Defaults off.
   bool getAnimationsEnabled() =>
       _prefs.getBool(_keyAnimationsEnabled) ?? false;
 
   Future<void> setAnimationsEnabled(bool enabled) async {
     await _prefs.setBool(_keyAnimationsEnabled, enabled);
+  }
+
+  /// Custom background colors, stored as ARGB ints. Null means "use the
+  /// default pure black/white".
+  int? getLightBackground() => _prefs.getInt(_keyLightBackground);
+
+  Future<void> setLightBackground(int? argb) async {
+    if (argb == null) {
+      await _prefs.remove(_keyLightBackground);
+    } else {
+      await _prefs.setInt(_keyLightBackground, argb);
+    }
+  }
+
+  int? getDarkBackground() => _prefs.getInt(_keyDarkBackground);
+
+  Future<void> setDarkBackground(int? argb) async {
+    if (argb == null) {
+      await _prefs.remove(_keyDarkBackground);
+    } else {
+      await _prefs.setInt(_keyDarkBackground, argb);
+    }
   }
 }
