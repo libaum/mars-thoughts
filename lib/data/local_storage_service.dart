@@ -12,6 +12,7 @@ class LocalStorageService {
   static const _keyDraftEditingId = 'draft_editing_id';
   static const _keyTutorialSeen = 'tutorial_seen';
   static const _keyAnimationsEnabled = 'animations_enabled';
+  static const _keyShowcaseSeeded = 'showcase_seeded';
   static const _keyLightBackground = 'light_background';
   static const _keyDarkBackground = 'dark_background';
 
@@ -93,6 +94,16 @@ class LocalStorageService {
 
   Future<void> setAnimationsEnabled(bool enabled) async {
     await _prefs.setBool(_keyAnimationsEnabled, enabled);
+  }
+
+  /// Whether the showcase seed data has already been written once. Debug
+  /// builds only re-seed when this is unset — e.g. after a fresh install —
+  /// not on every plain relaunch, or manual edits made while testing would
+  /// get wiped out each time the app restarts.
+  bool getShowcaseSeeded() => _prefs.getBool(_keyShowcaseSeeded) ?? false;
+
+  Future<void> setShowcaseSeeded() async {
+    await _prefs.setBool(_keyShowcaseSeeded, true);
   }
 
   /// Custom background colors, stored as ARGB ints. Null means "use the

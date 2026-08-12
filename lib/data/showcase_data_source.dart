@@ -3,9 +3,11 @@ import 'package:mars_thoughts/domain/thought.dart';
 
 /// Curated example thoughts used to fill the app for Play Store screenshots.
 ///
-/// Hard-gated by [enabled]: only active in `kDebugMode`, so every debug build
-/// starts straight into showcase data (overwriting whatever was stored) and
-/// this can never load in a profile or release build.
+/// Hard-gated by [enabled]: only active in `kDebugMode`, and only ever
+/// written once per install (see `LocalStorageService.getShowcaseSeeded`) —
+/// not on every relaunch, or manual edits made while testing would get wiped
+/// out each time the app restarts. This can never load in a profile or
+/// release build.
 class ShowcaseDataSource {
   const ShowcaseDataSource._();
 

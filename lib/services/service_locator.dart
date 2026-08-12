@@ -12,8 +12,11 @@ Future<void> setupServiceLocator() async {
   getIt.registerSingleton<LocalStorageService>(storage);
 
   // Screenshot-only seed data — see ShowcaseDataSource.enabled for the gate.
-  if (ShowcaseDataSource.enabled) {
+  // Only seeds once per install, not on every relaunch, or manual edits made
+  // while testing would get wiped out each time the app restarts.
+  if (ShowcaseDataSource.enabled && !storage.getShowcaseSeeded()) {
     await storage.setThoughts(ShowcaseDataSource.build());
+    await storage.setShowcaseSeeded();
   }
 
   getIt.registerSingleton<ThemeManager>(ThemeManager());

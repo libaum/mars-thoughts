@@ -110,12 +110,20 @@ bottom, opening on Write:
   instead would strand you on Write with the keyboard up.
 - **Write panel**: a single full-screen `TextField`. The draft **stays put**
   when you move between panels — look something up and come back to your
-  half-written thought. It is only filed away as a new thought by the
-  **`+` button** (bottom right, fades in once the draft is non-empty), never by
-  backgrounding the app — switching away and back leaves it untouched. So:
-  within a session the draft survives everything, across sessions never —
-  every launch starts blank because the draft lives only in memory. See
-  `_commitDraft`.
+  half-written thought. Within the app it is only filed away as a new thought
+  by the **`+` button** (bottom right, fades in once the draft is non-empty),
+  never just by switching panels — it's debounce-persisted to
+  `LocalStorageService` as you type (`_scheduleDraftSave`) so a background OS
+  kill mid-session can't lose it. See `_commitDraft`.
+  Backgrounding the app itself (`didChangeAppLifecycleState`,
+  `_fileDraftOnBackground`) is treated differently from an internal panel
+  switch: a non-empty draft is filed away right then (mirroring `+`) and the
+  persisted draft entry cleared. If the process survives in the background
+  and simply resumes, this is invisible — the in-memory editor and
+  `_editingId` are untouched, so it looks unchanged, just now backed by a real
+  thought. But if the process is actually killed while backgrounded, a cold
+  relaunch finds no draft and opens **blank** — the thought itself is safe in
+  the list, just no longer sitting in the editor.
 - **Tap** a thought → loads it straight into the write panel and reveals Write
   (`_openThought` → `_editInWritePanel` + `_animateNavTo`). There is no
   separate read screen: the keyboard is deliberately left alone, so opening a

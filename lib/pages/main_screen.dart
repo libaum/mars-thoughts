@@ -30,7 +30,7 @@ class MainScreen extends StatefulWidget {
 }
 
 class _MainScreenState extends State<MainScreen>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   final _manager = getIt<ThoughtsManager>();
   final _storage = getIt<LocalStorageService>();
 
@@ -56,11 +56,11 @@ class _MainScreenState extends State<MainScreen>
   static const _flingVelocity = 700.0;
 
   /// Snaps `_navController` straight to [target] — a plain cut, no motion in
-  /// between. The previous spring-based transition didn't read as smooth, so
-  /// this is a deliberate step back to nothing while a subtler replacement is
-  /// designed; see the "Animations" row in Settings, which is currently a
-  /// placeholder with no effect yet.
-  void _animateNavTo(double target, {double velocityPxPerSecond = 0}) {
+  /// between. This is the end-of-gesture landing regardless of the
+  /// "Animations" toggle in Settings; that toggle only controls whether the
+  /// panel visibly follows the finger *during* the drag itself (see
+  /// `_animateDrag`) — the release always lands here instantly.
+  void _animateNavTo(double target) {
     _cancelSelection();
     _navController.value = target;
   }
@@ -99,6 +99,7 @@ class _MainScreenState extends State<MainScreen>
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _navController = AnimationController(
       vsync: this,
       lowerBound: _slotSettings,
@@ -125,6 +126,7 @@ class _MainScreenState extends State<MainScreen>
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _draftSaveTimer?.cancel();
     _navController.dispose();
     _editorController.dispose();
@@ -134,6 +136,11 @@ class _MainScreenState extends State<MainScreen>
     _pinnedScroll.dispose();
     _allScroll.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused) _fileDraftOnBackground();
   }
 
   /// Debounced so a fast typist doesn't hit SharedPreferences on every
@@ -176,6 +183,32 @@ class _MainScreenState extends State<MainScreen>
     final id = _editingId;
     if (id == null || _editorController.text.trim().isEmpty) return;
     _manager.update(id, _editorController.text);
+  }
+
+  /// Called when the app is backgrounded — as opposed to just moving between
+  /// panels inside it. Unlike a normal draft, this actually files a new,
+  /// never-committed draft away into the thought list (mirroring `+`) rather
+  /// than leaving it pending, and clears the persisted draft entry. So if the
+  /// process is later killed while backgrounded, the thought isn't lost, but
+  /// a cold relaunch finds no draft and opens blank rather than reopening it.
+  /// If the app merely resumes without ever having been killed, none of this
+  /// is visible: the in-memory editor and [_editingId] are left untouched, so
+  /// it looks exactly like it did before backgrounding — now simply backed by
+  /// a real thought instead of a pending draft, same as editing an existing
+  /// one already works.
+  void _fileDraftOnBackground() {
+    final text = _editorController.text;
+    if (text.trim().isNotEmpty) {
+      final id = _editingId;
+      if (id != null) {
+        _manager.update(id, text);
+      } else {
+        final thought = _manager.create(text);
+        setState(() => _editingId = thought?.id);
+      }
+    }
+    _draftSaveTimer?.cancel();
+    _storage.clearDraft();
   }
 
   // ── Multi-select ────────────────────────────────────────────────────────
@@ -413,7 +446,7 @@ class _MainScreenState extends State<MainScreen>
       _editorFocus.unfocus();
     }
     if (target == _slotPinned) _maybeShowSettingsHint();
-    _animateNavTo(target, velocityPxPerSecond: velocity);
+    _animateNavTo(target);
   }
 
   void _onWriteDragEnd(DragEndDetails d) =>
