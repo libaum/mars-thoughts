@@ -1,16 +1,12 @@
-Mars Thoughts ist ein Ort, an dem Gedanken landen können, bevor sie verschwinden.
+Ein Ort, an dem Gedanken landen können, bevor sie verschwinden. Du öffnest die App, der Cursor ist schon da, sonst ist nichts auf dem Bildschirm, die Tastatur bleibt still, bis du reintippst. Du gehst, und es ist noch da, wenn du zurückkommst. Keine Titel, keine Ordner, kein Speichern-Knopf.
 
-Die App öffnet sich direkt in einem leeren Editor mit blinkendem Cursor. Du tippst, du gehst, es ist gespeichert — keine Titel, keine Ordner, kein Speichern-Knopf. Keine Notiz-App, kein Wiki, kein zweites Gehirn. Einfach ein Ort, um flüchtige Gedanken mit so wenig Reibung wie möglich festzuhalten.
+- Öffnet sich direkt zu einer leeren Seite, bereit, wann immer du es bist
+- Tippe auf Plus, um einen Gedanken abzulegen und einen neuen zu beginnen
+- Wische nach oben für alles, was du geschrieben hast, nach unten für Gepinntes, weiter unten für die Einstellungen
+- Halte einen Gedanken gedrückt, um ihn auszuwählen, dann pinnen, kopieren oder löschen
+- Wische einen Gedanken nach links zum Löschen (er landet im Papierkorb, nicht endgültig weg), nach rechts zum Kopieren, oder suche, um alles wiederzufinden
+- Offline und privat, deine Gedanken verlassen nie das Gerät
 
-Öffnen. Tippen. Fertig.
+Ich habe ständig Gedanken verloren, weil jede Notiz-App erst einen Titel, einen Ordner, eine Entscheidung wollte, bevor ich überhaupt fertig getippt hatte. Ich wollte einfach nur einen Ort zum Schreiben, den ich danach wieder verlassen kann.
 
-Funktionen:
-• Öffnet direkt zum Schreiben — der Cursor wartet schon
-• Auto-Speichern: Editor verlassen und es ist gesichert; leere Entwürfe werden verworfen
-• Drei Panels: zwischen Gepinnt, Schreiben und Alle Gedanken wischen
-• Lang drücken um Gedanken zu pinnen, die du immer wieder brauchst
-• Wischen zum Löschen, Suchen um alles wiederzufinden
-• Hell- und Dunkelmodus — Doppeltipp zum Umschalten
-• Rein schwarz-weißes UI — ruhig und aufgeräumt
-
-Offline und privat. Deine Gedanken verlassen nie das Gerät. Keine Werbung, kein Tracking, kein Konto nötig.
+Mars — Minimalist And Really Simple. Eine wachsende Familie kleiner, ruhiger Tools nach einer Idee: ein Problem gut lösen und nie um deine Aufmerksamkeit kämpfen. Keine Werbung, kein Tracking, nichts, das dich fesseln soll. Von einer Person gemacht, aus Überzeugung — Werkzeuge, die für dich arbeiten, nicht gegen dich.

@@ -1,16 +1,12 @@
-Mars Thoughts is a place for thoughts to land before they disappear.
+A place for thoughts to land before they disappear. Open the app and the cursor is already there, nothing else on screen, keyboard silent until you tap in. Leave, and it's still there when you come back. No titles, no folders, no save button.
 
-It opens straight into a blank editor with the cursor blinking. You type, you leave, it's saved — no titles, no folders, no save button. Not notes, not a wiki, not a second brain. Just somewhere to catch a fleeting thought with as little friction as possible.
+- Opens straight into a blank page, ready whenever you are
+- Tap the plus to file a thought away and start a new one
+- Swipe up for everything you've written, down for pinned, further down for settings
+- Hold a thought to select it, then pin, copy, or delete
+- Swipe a thought left to delete (it goes to trash, not gone for good), right to copy, or search to find anything
+- Offline and private, your thoughts never leave the device
 
-Open. Type. Close.
+I kept losing thoughts because every notes app wanted a title, a folder, a decision before I'd even finished typing. I just wanted somewhere to write and walk away.
 
-Features:
-• Opens directly to writing — the cursor is already waiting
-• Auto-save: leave the editor and it's kept; empty drafts are discarded
-• Three panels: swipe between Pinned, Write, and All thoughts
-• Long-press to pin the thoughts you keep coming back to
-• Swipe to delete, search to find anything
-• Light and dark mode — double-tap anywhere to switch
-• Pure black and white UI — calm and clutter-free
-
-Offline and private. Your thoughts never leave the device. No ads, no tracking, no account needed.
+Mars — Minimalist And Really Simple. A growing family of small, calm tools built around one idea: solve one problem well, and never fight for your attention. No ads, no tracking, nothing built to keep you hooked. Made by one person, out of conviction — tools that work for you, not on you.
