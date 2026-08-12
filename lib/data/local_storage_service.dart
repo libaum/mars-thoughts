@@ -7,11 +7,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 class LocalStorageService {
   static const _keyThoughts = 'thoughts';
   static const _keyThemeIsDark = 'theme_is_dark';
-  static const _keyEditHintSeen = 'edit_hint_seen';
   static const _keySettingsHintSeen = 'settings_hint_seen';
   static const _keyDraftText = 'draft_text';
   static const _keyDraftEditingId = 'draft_editing_id';
   static const _keyTutorialSeen = 'tutorial_seen';
+  static const _keyAnimationsEnabled = 'animations_enabled';
 
   final SharedPreferences _prefs;
 
@@ -48,13 +48,6 @@ class LocalStorageService {
     await _prefs.setBool(_keyThemeIsDark, isDark);
   }
 
-  /// Whether the "double-tap to edit" hint has already been shown once.
-  bool getEditHintSeen() => _prefs.getBool(_keyEditHintSeen) ?? false;
-
-  Future<void> setEditHintSeen() async {
-    await _prefs.setBool(_keyEditHintSeen, true);
-  }
-
   /// Whether the "keep pulling for settings" hint has already been shown once.
   bool getSettingsHintSeen() => _prefs.getBool(_keySettingsHintSeen) ?? false;
 
@@ -89,5 +82,14 @@ class LocalStorageService {
 
   Future<void> setTutorialSeen() async {
     await _prefs.setBool(_keyTutorialSeen, true);
+  }
+
+  /// Placeholder for a future screen-transition animation — currently has no
+  /// effect, since the transition itself is a plain cut. Defaults off.
+  bool getAnimationsEnabled() =>
+      _prefs.getBool(_keyAnimationsEnabled) ?? false;
+
+  Future<void> setAnimationsEnabled(bool enabled) async {
+    await _prefs.setBool(_keyAnimationsEnabled, enabled);
   }
 }

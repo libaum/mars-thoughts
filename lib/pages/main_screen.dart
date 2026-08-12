@@ -2,26 +2,26 @@ import 'dart:async';
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:mars_thoughts/data/local_storage_service.dart';
 import 'package:mars_thoughts/domain/thought.dart';
 import 'package:mars_thoughts/logic/thoughts_manager.dart';
 import 'package:mars_thoughts/pages/settings_screen.dart';
-import 'package:mars_thoughts/pages/thought_read_screen.dart';
 import 'package:mars_thoughts/pages/widgets/thought_row.dart';
 import 'package:mars_thoughts/services/service_locator.dart';
 import 'package:mars_thoughts/theme/theme_constants.dart';
 
-/// Three panels stacked on one vertical axis: Pinned (above), Write (base),
-/// All thoughts (below). The app opens on the blank Write panel — tap it to
-/// start typing. Dragging **up** pulls the All/search panel in from below —
-/// the direction your thoughts pile up in — and dragging **down** pulls
-/// Pinned in from above. Both are fingered reveals that snap open or closed,
-/// and each closes again by pulling further past its list's far edge.
-///
-/// Settings sit at the very top of that same axis: keep pulling down past the
-/// top of the pinned list and they arrive. One axis, one direction, no gear
-/// icon. The keyboard is never raised on its own, so arriving here stays calm
-/// rather than feeling pushy.
+/// Four panels stacked on one continuous vertical axis, top to bottom:
+/// Settings, Pinned, Write, All. The whole stack moves together as a single
+/// filmstrip — whichever direction the finger drags, both the current panel
+/// and its neighbour travel that same direction by the same distance, so the
+/// visible motion always matches the gesture. The app opens on the blank
+/// Write panel — tap it to start typing. Dragging **up** pulls All in from
+/// below — the direction your thoughts pile up in — and dragging **down**
+/// pulls Pinned in from above, then keeps going into Settings if you keep
+/// pulling past the top of the pinned list. One axis, one direction, no gear
+/// icon. The keyboard is never raised on its own, so arriving on Write stays
+/// calm rather than feeling pushy.
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
 
@@ -38,25 +38,50 @@ class _MainScreenState extends State<MainScreen>
   final _editorScroll = ScrollController();
   final _editorFocus = FocusNode();
   final _searchController = TextEditingController();
+  final _pinnedScroll = ScrollController();
+  final _allScroll = ScrollController();
 
-  // -1 = Pinned fully open (pulled down from above), 0 = Write,
-  // 1 = All fully open (pulled up from below).
+  // Position along the four-panel filmstrip: -2 = Settings, -1 = Pinned,
+  // 0 = Write, 1 = All. Each panel is painted at `(slot - value) * height`,
+  // so the whole stack shifts together as `value` changes.
   late final AnimationController _navController;
+
+  static const _slotSettings = -2.0;
+  static const _slotPinned = -1.0;
+  static const _slotWrite = 0.0;
+  static const _slotAll = 1.0;
 
   static const _dragSensitivity = 300.0;
   static const _openThreshold = 0.35;
   static const _flingVelocity = 700.0;
+
+  /// Snaps `_navController` straight to [target] — a plain cut, no motion in
+  /// between. The previous spring-based transition didn't read as smooth, so
+  /// this is a deliberate step back to nothing while a subtler replacement is
+  /// designed; see the "Animations" row in Settings, which is currently a
+  /// placeholder with no effect yet.
+  void _animateNavTo(double target, {double velocityPxPerSecond = 0}) {
+    _cancelSelection();
+    _navController.value = target;
+  }
 
   static const _tutorialText =
       "Welcome to Mars Thoughts.\n\n"
       "Just start typing — there's no save button, this is already saved.\n\n"
       "Swipe up for all your thoughts, swipe down for pinned ones — keep "
       "pulling down past Pinned to reach Settings.\n\n"
-      "On a thought: swipe right to delete, swipe left to copy, long-press "
-      "to pin. Tap to open it, then double-tap the text to edit.\n\n"
+      "On a thought: swipe left to delete, swipe right to copy. Long-press to "
+      "select — then pin, copy, or delete from the bar. Tap to open it and "
+      "edit right there.\n\n"
       "Tap + when you're ready to file this away and start fresh.";
 
   String _query = '';
+
+  /// Multi-select state, live only within Pinned/All (rows are the only thing
+  /// that can start it). Cleared whenever the panel changes underneath it —
+  /// see [_cancelSelection] and its call sites.
+  bool _selectionModeOn = false;
+  Set<String> _selectedIds = {};
 
   /// The thought currently loaded into the write panel, if any. `null` means
   /// the editor holds a brand-new draft. An existing thought is edited in the
@@ -67,17 +92,6 @@ class _MainScreenState extends State<MainScreen>
   // in the background can't lose it — but not on every keystroke.
   Timer? _draftSaveTimer;
 
-  // Overscroll accounting for closing an open panel back to Write, mirroring
-  // ThoughtReadScreen's pull-down-to-dismiss.
-  double _allOverscroll = 0;
-  double _pinnedOverscroll = 0;
-  bool _closing = false;
-
-  // Pinned is the top of the axis, and Settings sit above it: keep pulling
-  // down past the top of the pinned list and they come in.
-  double _pinnedTopOverscroll = 0;
-  bool _openingSettings = false;
-
   /// One-time nudge, shown the first time Pinned is opened, that the same
   /// downward pull continues into Settings.
   bool _settingsHintVisible = false;
@@ -87,9 +101,9 @@ class _MainScreenState extends State<MainScreen>
     super.initState();
     _navController = AnimationController(
       vsync: this,
-      lowerBound: -1,
-      upperBound: 1,
-      value: 0,
+      lowerBound: _slotSettings,
+      upperBound: _slotAll,
+      value: _slotWrite,
     );
     _editingId = _storage.getDraftEditingId();
     final draft = _storage.getDraftText();
@@ -117,6 +131,8 @@ class _MainScreenState extends State<MainScreen>
     _editorScroll.dispose();
     _editorFocus.dispose();
     _searchController.dispose();
+    _pinnedScroll.dispose();
+    _allScroll.dispose();
     super.dispose();
   }
 
@@ -162,62 +178,77 @@ class _MainScreenState extends State<MainScreen>
     _manager.update(id, _editorController.text);
   }
 
-  // Guards against a fast double-tap pushing two edit screens for the same
-  // thought — the hidden second one would later overwrite the first's save
-  // with its stale, unedited snapshot when it's popped.
-  bool _openingThought = false;
+  // ── Multi-select ────────────────────────────────────────────────────────
 
-  void _openThought(Thought thought) async {
-    if (_openingThought) return;
-    // Already loaded in the write panel — a read view would show the stored
-    // text, not what you're in the middle of typing. Go back to it instead.
+  void _enterSelection(String id) {
+    setState(() {
+      _selectionModeOn = true;
+      _selectedIds = {id};
+    });
+  }
+
+  void _toggleSelected(String id) {
+    setState(() {
+      if (!_selectedIds.add(id)) _selectedIds.remove(id);
+    });
+  }
+
+  /// Exits selection without acting. Deselecting down to zero items does
+  /// *not* call this on its own — only an explicit Cancel, a completed
+  /// action, or leaving the panel does.
+  void _cancelSelection() {
+    if (!_selectionModeOn) return;
+    setState(() {
+      _selectionModeOn = false;
+      _selectedIds = {};
+    });
+  }
+
+  void _selectionPin() {
+    _manager.togglePinMany(_selectedIds);
+    _cancelSelection();
+  }
+
+  void _selectionCopy() {
+    final texts = _manager.thoughtsNotifier.value
+        .where((t) => _selectedIds.contains(t.id))
+        .map((t) => t.text)
+        .join('\n\n');
+    Clipboard.setData(ClipboardData(text: texts));
+    _cancelSelection();
+  }
+
+  void _selectionDelete() {
+    _manager.deleteMany(_selectedIds);
+    _cancelSelection();
+  }
+
+  void _openThought(Thought thought) {
+    // Already loaded in the write panel — reveal it and pick up where you
+    // left off, rather than reloading the stored (possibly stale) text.
     if (thought.id == _editingId) {
       _returnToWrite(focus: true);
       return;
     }
-    _openingThought = true;
-    var editing = false;
-    await Navigator.push<void>(
-      context,
-      MaterialPageRoute(
-        builder: (_) => ThoughtReadScreen(
-          thought: thought,
-          onEdit: (caret) {
-            editing = true;
-            _editInWritePanel(thought, caret);
-          },
-        ),
-      ),
-    );
-    _openingThought = false;
-    // Focus only once the read screen is gone — raising the keyboard for a
-    // route that is still on top would fight its exit transition.
-    if (editing && mounted) _editorFocus.requestFocus();
+    _editInWritePanel(thought);
+    _animateNavTo(_slotWrite);
   }
 
   /// Loads an existing thought into the write panel. From here on it behaves
   /// exactly like a fresh draft — same field, same reveal gestures, same `+`.
-  ///
-  /// Runs while the read screen is still popping, so the panel move has to
-  /// snap rather than animate: by the time anything of MainScreen is visible
-  /// again, Write is already the panel on screen.
-  void _editInWritePanel(Thought thought, int caret) {
+  /// The keyboard is deliberately left alone: opening a thought is calm, not
+  /// pushy, so it only appears once the user taps into the field themselves.
+  void _editInWritePanel(Thought thought) {
     _commitDraft();
     setState(() => _editingId = thought.id);
     _editorController.text = thought.text;
     _editorController.selection = TextSelection.collapsed(
-      offset: caret.clamp(0, thought.text.length),
+      offset: thought.text.length,
     );
-    _navController.stop();
-    _navController.value = 0;
   }
 
   void _returnToWrite({required bool focus}) {
-    _navController.animateTo(
-      0,
-      curve: Curves.easeOut,
-      duration: const Duration(milliseconds: 220),
-    );
+    _animateNavTo(_slotWrite);
     if (focus) _editorFocus.requestFocus();
   }
 
@@ -227,125 +258,217 @@ class _MainScreenState extends State<MainScreen>
     _editorFocus.requestFocus();
   }
 
-  void _openSettings() async {
-    await Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const SettingsScreen()),
-    );
-    _openingSettings = false;
-    _pinnedTopOverscroll = 0;
+  void _openSettings() {
+    _animateNavTo(_slotSettings);
   }
 
   // ── Vertical reveal navigation ─────────────────────────────────────────
 
-  /// Whether a drag on the write panel should reveal a panel rather than
+  /// Whether a drag on the write editor should reveal a panel rather than
   /// scroll the draft. The editor keeps the axis for as long as it has text
   /// left to show in that direction; once it is pinned against that end, the
-  /// gesture belongs to navigation. Without this the app would be stuck on
-  /// Write for as long as the editor held focus.
-  bool _canRevealFrom(double dy) {
-    if (!_editorScroll.hasClients) return true;
-    final position = _editorScroll.position;
+  /// gesture belongs to navigation. Only used by Write/Settings — Pinned/All
+  /// are plain `ListView`s, whose own scroll recognizer reliably wins a
+  /// competing raw drag once there's real content to scroll, so those two
+  /// are driven by their overscroll instead (see [_onPinnedScrollHandoff]).
+  bool _canRevealFrom(ScrollController controller, double dy) {
+    if (!controller.hasClients) return true;
+    final position = controller.position;
     if (position.maxScrollExtent <= 0) return true;
-    // Dragging up reveals All, so the editor must have nothing left below it.
+    // Dragging up reveals the panel below, so the scrollable must have
+    // nothing left below it; dragging down reveals the one above.
     return dy < 0
         ? position.pixels >= position.maxScrollExtent - 0.5
         : position.pixels <= position.minScrollExtent + 0.5;
   }
 
-  void _onWriteDragStart(DragStartDetails d) {
-    // Take over from a snap animation still running from the last drag.
-    _navController.stop();
-  }
+  // Overscroll accounting for revealing a panel once the editor's own scroll
+  // runs out of room, mirroring _onAllScroll/_onPinnedScroll below.
+  double _editorTopOverscroll = 0;
+  double _editorBottomOverscroll = 0;
+  bool _revealingFromEditor = false;
 
-  void _onWriteDragUpdate(DragUpdateDetails d) {
-    _navController.value =
-        (_navController.value - d.delta.dy / _dragSensitivity).clamp(-1.0, 1.0);
-  }
-
-  void _onWriteDragEnd(DragEndDetails d) {
-    final velocity = d.primaryVelocity ?? 0;
-    double target;
-    if (velocity.abs() > _flingVelocity) {
-      target = velocity > 0 ? -1.0 : 1.0;
-    } else {
-      final v = _navController.value;
-      target = v.abs() >= _openThreshold ? (v > 0 ? 1.0 : -1.0) : 0.0;
-    }
-    if (target == 0 && _navController.value == 0) return;
-    // Leaving Write only drops the keyboard — the draft stays put, so looking
-    // something up and coming back doesn't cost you the half-written thought.
-    // Arriving back at Write deliberately does *not* raise the keyboard again.
-    if (target != 0) {
-      _saveInPlace();
-      _editorFocus.unfocus();
-    }
-    if (target < 0) _maybeShowSettingsHint();
-    _navController.animateTo(
-      target,
-      curve: Curves.easeOut,
-      duration: const Duration(milliseconds: 220),
-    );
-  }
-
-  void _closeToWrite() {
-    _navController
-        .animateTo(
-          0,
-          curve: Curves.easeOut,
-          duration: const Duration(milliseconds: 220),
-        )
-        .then((_) => _closing = false);
-  }
-
-  /// All came up from below, so it goes back down the same way: pull past the
-  /// top of the (already fully open) list and it sinks back to Write — the
-  /// same "pull past the edge to go back" gesture used in ThoughtReadScreen.
-  bool _onAllScroll(ScrollNotification n) {
-    if (_navController.value < 0.99) return false;
-    if (n is OverscrollNotification && n.overscroll < 0) {
-      _allOverscroll += -n.overscroll;
-      if (_allOverscroll > 90 && !_closing) {
-        _closing = true;
-        _closeToWrite();
+  /// Picks up where [_RevealDragRecognizer] leaves off: that recognizer only
+  /// decides once, right as a drag starts, so a long draft that isn't already
+  /// scrolled to the edge you're pulling toward keeps the whole gesture for
+  /// itself. This lets the editor's own scroll run all the way to the top or
+  /// bottom first — same as any other scrollable — and only once you keep
+  /// pulling past that edge, the same "pull past the end" distance used
+  /// everywhere else in this file, does it hand off to the panel reveal.
+  bool _onEditorScroll(ScrollNotification n) {
+    if (n is OverscrollNotification) {
+      if (n.overscroll < 0) {
+        _editorTopOverscroll += -n.overscroll;
+        if (_editorTopOverscroll > 90 && !_revealingFromEditor) {
+          _revealingFromEditor = true;
+          _revealFromEditor(_slotPinned);
+        }
+      } else {
+        _editorBottomOverscroll += n.overscroll;
+        if (_editorBottomOverscroll > 90 && !_revealingFromEditor) {
+          _revealingFromEditor = true;
+          _revealFromEditor(_slotAll);
+        }
       }
-    } else if (n is ScrollEndNotification ||
-        (n is ScrollUpdateNotification && (n.scrollDelta ?? 0) > 0)) {
-      _allOverscroll = 0;
+    } else if (n is ScrollEndNotification) {
+      _editorTopOverscroll = 0;
+      _editorBottomOverscroll = 0;
+    } else if (n is ScrollUpdateNotification) {
+      final delta = n.scrollDelta ?? 0;
+      if (delta < 0) _editorTopOverscroll = 0;
+      if (delta > 0) _editorBottomOverscroll = 0;
     }
     return false;
   }
 
-  /// Both ends of the pinned list do something, and both continue the motion
-  /// that got you here. Pulling past the **bottom** lifts the panel back up to
-  /// Write, the way it came. Pulling further past the **top** keeps going in
-  /// the original downward direction and brings in Settings — they live above
-  /// everything, at the far end of the same axis, so there is no gear icon and
-  /// no menu anywhere. Pinned lists stay short, so both edges are always in
-  /// reach.
-  bool _onPinnedScroll(ScrollNotification n) {
-    if (_navController.value > -0.99) return false;
-    if (n is OverscrollNotification) {
-      if (n.overscroll > 0) {
-        _pinnedOverscroll += n.overscroll;
-        if (_pinnedOverscroll > 90 && !_closing) {
-          _closing = true;
-          _closeToWrite();
-        }
+  void _revealFromEditor(double target) {
+    _cancelSelection();
+    _saveInPlace();
+    _editorFocus.unfocus();
+    if (target == _slotPinned) _maybeShowSettingsHint();
+    _navController.value = target;
+    _revealingFromEditor = false;
+  }
+
+  // Tracks how far the current drag has travelled along the full filmstrip
+  // (-2..1), independent of whether that's actually mirrored onto
+  // `_navController`. With animations off this is the only record of drag
+  // progress — the panel itself doesn't move until the gesture resolves.
+  // Shared between Write's and Settings' own raw drags — only one of them is
+  // ever interactive at a time, since only one panel is ever at rest.
+  double _dragProgress = 0;
+  bool _animateDrag = false;
+
+  void _onDragStart(DragStartDetails d) {
+    // Take over from a snap animation still running from the last drag.
+    _navController.stop();
+    _dragProgress = _navController.value;
+    // Cached for the duration of the drag so a mid-drag toggle flip (not
+    // reachable in the UI today, but cheap to guard against) can't produce a
+    // half-followed gesture.
+    _animateDrag = _storage.getAnimationsEnabled();
+  }
+
+  /// [min]/[max] bound the drag to the dragging panel's own immediate
+  /// neighbours, so an unusually long drag can't overshoot past them into a
+  /// panel that was never revealed on the way — e.g. Write shouldn't be able
+  /// to preview Settings without passing through a visible Pinned first.
+  void _onDragUpdate(
+    DragUpdateDetails d, {
+    double min = _slotPinned,
+    double max = _slotAll,
+  }) {
+    _dragProgress = (_dragProgress - d.delta.dy / _dragSensitivity).clamp(
+      min,
+      max,
+    );
+    // Animations off (the default): the panel stays put — no fingered
+    // reveal — until the gesture resolves in the matching *DragEnd, which
+    // then cuts straight to the result instead of easing into it.
+    if (_animateDrag) _navController.value = _dragProgress;
+  }
+
+  void _onSettingsDragUpdate(DragUpdateDetails d) {
+    _onDragUpdate(d, min: _slotSettings, max: _slotPinned);
+  }
+
+  /// Shared end-of-drag decision for Write's and Settings' own raw reveal
+  /// drag: pick whichever neighbour the gesture committed to — by fling
+  /// velocity, or by distance dragged past [_openThreshold] — or spring
+  /// back to [home] otherwise. [above]/[below] are the neighbours revealed
+  /// by dragging down/up respectively; leave either null where a panel has
+  /// no neighbour on that side (nothing above Settings). Pinned/All don't
+  /// have their own raw drag recognizer — a `ListView`'s own scroll
+  /// recognizer reliably wins the gesture arena over a competing raw drag
+  /// once it has real scroll content — so those two panels feed this same
+  /// method from their `ScrollNotification`s instead (see
+  /// [_onPinnedScroll]/[_onAllScroll]).
+  void _onPanelDragEnd(
+    DragEndDetails d, {
+    required double home,
+    double? above,
+    double? below,
+  }) {
+    final velocity = d.primaryVelocity ?? 0;
+    double target;
+    if (velocity.abs() > _flingVelocity) {
+      target = (velocity > 0 ? above : below) ?? home;
+    } else {
+      final progress = _dragProgress - home;
+      if (progress <= -_openThreshold && above != null) {
+        target = above;
+      } else if (progress >= _openThreshold && below != null) {
+        target = below;
       } else {
-        _pinnedTopOverscroll += -n.overscroll;
-        if (_pinnedTopOverscroll > 90 && !_openingSettings) {
-          _openingSettings = true;
-          _openSettings();
-        }
+        target = home;
       }
+    }
+    if (target == home && _navController.value == home) return;
+    // Leaving Write only drops the keyboard — the draft stays put, so
+    // looking something up and coming back doesn't cost you the
+    // half-written thought. Arriving back at Write deliberately does *not*
+    // raise the keyboard again.
+    if (home == _slotWrite && target != _slotWrite) {
+      _saveInPlace();
+      _editorFocus.unfocus();
+    }
+    if (target == _slotPinned) _maybeShowSettingsHint();
+    _animateNavTo(target, velocityPxPerSecond: velocity);
+  }
+
+  void _onWriteDragEnd(DragEndDetails d) =>
+      _onPanelDragEnd(d, home: _slotWrite, above: _slotPinned, below: _slotAll);
+
+  void _onSettingsDragEnd(DragEndDetails d) =>
+      _onPanelDragEnd(d, home: _slotSettings, below: _slotPinned);
+
+  void _closeToWrite() {
+    _cancelSelection();
+    _navController.value = _slotWrite;
+  }
+
+  // Pinned/All are plain `ListView`s, so — unlike Write/Settings — a
+  // competing raw drag recognizer doesn't work here: a `ListView`'s built-in
+  // scroll recognizer reliably wins that race once it has real content. But
+  // `ScrollNotification`s carry the same raw `dragDetails` (DragStart/
+  // Update/EndDetails) that the recognizer-driven panels use, once the list
+  // is pulled past its own edge into overscroll — so these two panels can
+  // listen in on that and feed the exact same shared drag machinery as
+  // Write/Settings, live-follow and fling included, without ever competing
+  // for the gesture.
+  bool _onPinnedScroll(ScrollNotification n) {
+    if (n is ScrollStartNotification && n.dragDetails != null) {
+      _onDragStart(n.dragDetails!);
+    } else if (n is OverscrollNotification && n.dragDetails != null) {
+      _onDragUpdate(n.dragDetails!, min: _slotSettings, max: _slotWrite);
     } else if (n is ScrollEndNotification) {
-      _pinnedOverscroll = 0;
-      _pinnedTopOverscroll = 0;
-    } else if (n is ScrollUpdateNotification) {
-      final delta = n.scrollDelta ?? 0;
-      if (delta < 0) _pinnedOverscroll = 0;
-      if (delta > 0) _pinnedTopOverscroll = 0;
+      // `dragDetails` is null here when the release had enough residual
+      // velocity for the list's own physics to start a ballistic settle —
+      // this notification then arrives only after that settle completes.
+      // Committing regardless (with zero velocity, i.e. threshold-only) is
+      // required, or a drag released that way leaves the panel stuck
+      // mid-reveal forever, since no other notification follows.
+      _onPanelDragEnd(
+        n.dragDetails ?? DragEndDetails(),
+        home: _slotPinned,
+        above: _slotSettings,
+        below: _slotWrite,
+      );
+    }
+    return false;
+  }
+
+  bool _onAllScroll(ScrollNotification n) {
+    if (n is ScrollStartNotification && n.dragDetails != null) {
+      _onDragStart(n.dragDetails!);
+    } else if (n is OverscrollNotification && n.dragDetails != null) {
+      _onDragUpdate(n.dragDetails!, min: _slotWrite, max: _slotAll);
+    } else if (n is ScrollEndNotification) {
+      _onPanelDragEnd(
+        n.dragDetails ?? DragEndDetails(),
+        home: _slotAll,
+        above: _slotWrite,
+      );
     }
     return false;
   }
@@ -361,47 +484,158 @@ class _MainScreenState extends State<MainScreen>
     });
   }
 
+  /// System back mirrors swipe-back at whatever level you're at: cancel a
+  /// selection first, then step one level back through the stack — Settings
+  /// to Pinned, Pinned/All to Write — the same neighbour a pull-past-the-edge
+  /// gesture would land on. Only once both are already settled does back
+  /// fall through to its default behaviour (leaving the app).
+  void _stepBack() {
+    if (_navController.value == _slotSettings) {
+      _animateNavTo(_slotPinned);
+    } else {
+      _closeToWrite();
+    }
+  }
+
+  /// Positions [child] on the filmstrip at [slot]: on-screen exactly when
+  /// `_navController.value == slot`, and offset by one full panel height for
+  /// every step of distance from it. Every panel uses this same formula, so
+  /// the whole stack always moves together, by the same distance, in the
+  /// direction the finger drags — never just the incoming panel sliding over
+  /// a static one.
+  Widget _positioned(double slot, double height, Widget child) {
+    return AnimatedBuilder(
+      animation: _navController,
+      child: child,
+      builder: (context, child) {
+        return Transform.translate(
+          offset: Offset(0, (slot - _navController.value) * height),
+          child: child,
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    // No bottom SafeArea: the panels have to paint all the way to the screen
-    // edge, or the panel underneath shows through the translucent system
-    // navigation bar while one slides over it. The lists and the settings
-    // strip carry the inset themselves instead.
-    return Scaffold(
-      body: SafeArea(
-        bottom: false,
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final height = constraints.maxHeight;
-            return Stack(
-              fit: StackFit.expand,
-              children: [
-                _buildWritePanel(),
-                AnimatedBuilder(
-                  animation: _navController,
-                  child: _buildPinnedPanel(),
-                  builder: (context, child) {
-                    final v = _navController.value.clamp(-1.0, 0.0);
-                    return Transform.translate(
-                      offset: Offset(0, -height * (1 + v)),
-                      child: child,
-                    );
-                  },
-                ),
-                AnimatedBuilder(
-                  animation: _navController,
-                  child: _buildAllPanel(),
-                  builder: (context, child) {
-                    final v = _navController.value.clamp(0.0, 1.0);
-                    return Transform.translate(
-                      offset: Offset(0, height * (1 - v)),
-                      child: child,
-                    );
-                  },
-                ),
-              ],
-            );
+    // Re-evaluated on every nav change via the AnimatedBuilder below, since
+    // dragging a panel open doesn't otherwise trigger a rebuild of this
+    // widget.
+    return AnimatedBuilder(
+      animation: _navController,
+      builder: (context, child) {
+        final canPop = !_selectionModeOn && _navController.value == _slotWrite;
+        return PopScope(
+          canPop: canPop,
+          onPopInvokedWithResult: (didPop, result) {
+            if (didPop) return;
+            if (_selectionModeOn) {
+              _cancelSelection();
+            } else {
+              _stepBack();
+            }
           },
+          child: child!,
+        );
+      },
+      // No bottom SafeArea: the panels have to paint all the way to the
+      // screen edge, or the panel underneath shows through the translucent
+      // system navigation bar while one slides over it. The lists and the
+      // settings strip carry the inset themselves instead.
+      child: Scaffold(
+        body: SafeArea(
+          bottom: false,
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final height = constraints.maxHeight;
+              return Stack(
+                fit: StackFit.expand,
+                children: [
+                  _positioned(_slotSettings, height, _buildSettingsPanel()),
+                  _positioned(_slotPinned, height, _buildPinnedPanel()),
+                  _positioned(_slotWrite, height, _buildWritePanel()),
+                  _positioned(_slotAll, height, _buildAllPanel()),
+                  _buildSelectionBar(),
+                ],
+              );
+            },
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Bottom-anchored bar shown while [_selectionModeOn] — plain text actions,
+  /// no cards or elevation, a single hairline divider matching
+  /// [_ThoughtDivider]. Sits above both list panels since only one is ever
+  /// reachable at a time.
+  Widget _buildSelectionBar() {
+    final primary = Theme.of(context).colorScheme.primary;
+    return IgnorePointer(
+      ignoring: !_selectionModeOn,
+      child: Align(
+        alignment: Alignment.bottomCenter,
+        child: AnimatedOpacity(
+          opacity: _selectionModeOn ? 1 : 0,
+          duration: const Duration(milliseconds: 150),
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: Theme.of(context).scaffoldBackgroundColor,
+              border: Border(
+                top: BorderSide(
+                  color: primary.withValues(alpha: 0.08),
+                  width: 0.5,
+                ),
+              ),
+            ),
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(
+                24,
+                16,
+                24,
+                16 + MediaQuery.paddingOf(context).bottom,
+              ),
+              child: Row(
+                children: [
+                  _selectionAction('Cancel', _cancelSelection),
+                  const Spacer(),
+                  _selectionAction(
+                    'Pin',
+                    _selectedIds.isEmpty ? null : _selectionPin,
+                  ),
+                  const SizedBox(width: 28),
+                  _selectionAction(
+                    'Copy',
+                    _selectedIds.isEmpty ? null : _selectionCopy,
+                  ),
+                  const SizedBox(width: 28),
+                  _selectionAction(
+                    'Delete',
+                    _selectedIds.isEmpty ? null : _selectionDelete,
+                    color: COLOR_DELETE,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _selectionAction(String label, VoidCallback? onTap, {Color? color}) {
+    final enabled = onTap != null;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 15,
+          fontWeight: FontWeight.w300,
+          color: enabled
+              ? (color ?? Theme.of(context).colorScheme.primary)
+              : COLOR_SECONDARY.withValues(alpha: 0.4),
         ),
       ),
     );
@@ -410,24 +644,27 @@ class _MainScreenState extends State<MainScreen>
   // ── Write ───────────────────────────────────────────────────────────────
 
   Widget _buildWritePanel() {
-    final field = Padding(
-      padding: const EdgeInsets.fromLTRB(32, 32, 32, 16),
-      child: TextField(
-        controller: _editorController,
-        focusNode: _editorFocus,
-        scrollController: _editorScroll,
-        maxLines: null,
-        expands: true,
-        textAlignVertical: TextAlignVertical.top,
-        keyboardType: TextInputType.multiline,
-        textCapitalization: TextCapitalization.sentences,
-        cursorWidth: 1.5,
-        style: TEXT_STYLE_EDITOR,
-        decoration: const InputDecoration(
-          isCollapsed: true,
-          border: InputBorder.none,
-          hintText: "What's on your mind?",
-          hintStyle: TEXT_STYLE_EMPTY,
+    final field = NotificationListener<ScrollNotification>(
+      onNotification: _onEditorScroll,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(32, 32, 32, 16),
+        child: TextField(
+          controller: _editorController,
+          focusNode: _editorFocus,
+          scrollController: _editorScroll,
+          maxLines: null,
+          expands: true,
+          textAlignVertical: TextAlignVertical.top,
+          keyboardType: TextInputType.multiline,
+          textCapitalization: TextCapitalization.sentences,
+          cursorWidth: 1.5,
+          style: TEXT_STYLE_EDITOR,
+          decoration: const InputDecoration(
+            isCollapsed: true,
+            border: InputBorder.none,
+            hintText: "What's on your mind?",
+            hintStyle: TEXT_STYLE_EMPTY,
+          ),
         ),
       ),
     );
@@ -438,10 +675,12 @@ class _MainScreenState extends State<MainScreen>
       gestures: <Type, GestureRecognizerFactory>{
         _RevealDragRecognizer:
             GestureRecognizerFactoryWithHandlers<_RevealDragRecognizer>(
-              () => _RevealDragRecognizer(canReveal: _canRevealFrom),
+              () => _RevealDragRecognizer(
+                canReveal: (dy) => _canRevealFrom(_editorScroll, dy),
+              ),
               (instance) => instance
-                ..onStart = _onWriteDragStart
-                ..onUpdate = _onWriteDragUpdate
+                ..onStart = _onDragStart
+                ..onUpdate = _onDragUpdate
                 ..onEnd = _onWriteDragEnd,
             ),
       },
@@ -486,6 +725,28 @@ class _MainScreenState extends State<MainScreen>
     );
   }
 
+  // ── Settings ────────────────────────────────────────────────────────────
+
+  /// Settings has no scrollable content of its own to give first refusal to,
+  /// so unlike Write it only ever needs to accept upward drags (revealing
+  /// Pinned below it) — pulling down does nothing, there's nothing above.
+  Widget _buildSettingsPanel() {
+    return RawGestureDetector(
+      behavior: HitTestBehavior.opaque,
+      gestures: <Type, GestureRecognizerFactory>{
+        _RevealDragRecognizer:
+            GestureRecognizerFactoryWithHandlers<_RevealDragRecognizer>(
+              () => _RevealDragRecognizer(canReveal: (dy) => dy < 0),
+              (instance) => instance
+                ..onStart = _onDragStart
+                ..onUpdate = _onSettingsDragUpdate
+                ..onEnd = _onSettingsDragEnd,
+            ),
+      },
+      child: const SettingsScreen(),
+    );
+  }
+
   // ── Pinned ──────────────────────────────────────────────────────────────
 
   Widget _buildPinnedPanel() {
@@ -520,6 +781,7 @@ class _MainScreenState extends State<MainScreen>
                   onNotification: _onPinnedScroll,
                   child: _thoughtList(
                     pinned,
+                    controller: _pinnedScroll,
                     showPinIcon: false,
                     allowDelete: false,
                     emptyMessage: 'No pinned thoughts',
@@ -569,6 +831,7 @@ class _MainScreenState extends State<MainScreen>
                   onNotification: _onAllScroll,
                   child: _thoughtList(
                     visible,
+                    controller: _allScroll,
                     showPinIcon: true,
                     query: _query,
                     emptyMessage: thoughts.isEmpty
@@ -588,12 +851,14 @@ class _MainScreenState extends State<MainScreen>
 
   Widget _thoughtList(
     List<Thought> thoughts, {
+    required ScrollController controller,
     required bool showPinIcon,
     required String emptyMessage,
     bool allowDelete = true,
     String query = '',
   }) {
     return ListView.separated(
+      controller: controller,
       keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
       physics: const AlwaysScrollableScrollPhysics(),
       // Clears the system navigation bar the panels now paint behind.
@@ -610,8 +875,14 @@ class _MainScreenState extends State<MainScreen>
           thought: thought,
           showPinIcon: showPinIcon,
           query: query,
-          onTap: () => _openThought(thought),
-          onLongPress: () => _manager.togglePin(thought.id),
+          selected: _selectedIds.contains(thought.id),
+          selectionMode: _selectionModeOn,
+          onTap: _selectionModeOn
+              ? () => _toggleSelected(thought.id)
+              : () => _openThought(thought),
+          onLongPress: _selectionModeOn
+              ? () => _toggleSelected(thought.id)
+              : () => _enterSelection(thought.id),
           onDelete: allowDelete ? () => _manager.delete(thought.id) : null,
         );
       },

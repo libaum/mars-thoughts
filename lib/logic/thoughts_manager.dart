@@ -110,6 +110,28 @@ class ThoughtsManager {
     _commit(updated);
   }
 
+  /// Pins every one of [ids] if any of them is unpinned, otherwise unpins
+  /// all of them — so applying it twice in a row is never a no-op.
+  void togglePinMany(Set<String> ids) {
+    final now = DateTime.now();
+    final pinAll = _thoughts.any((t) => ids.contains(t.id) && !t.isPinned);
+    final updated = _thoughts.map((t) {
+      if (!ids.contains(t.id)) return t;
+      return pinAll ? t.copyWith(pinnedAt: now) : t.copyWith(clearPinned: true);
+    }).toList();
+    _commit(updated);
+  }
+
+  /// Moves every one of [ids] to the trash (recoverable), unpinning each.
+  void deleteMany(Set<String> ids) {
+    final now = DateTime.now();
+    final updated = _thoughts.map((t) {
+      if (!ids.contains(t.id)) return t;
+      return t.copyWith(deletedAt: now, clearPinned: true);
+    }).toList();
+    _commit(updated);
+  }
+
   /// Sorts, persists, and publishes a new thought list.
   void _commit(List<Thought> thoughts) {
     _sortByUpdated(thoughts);

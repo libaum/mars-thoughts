@@ -1,13 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:mars_thoughts/data/local_storage_service.dart';
 import 'package:mars_thoughts/pages/about_screen.dart';
 import 'package:mars_thoughts/pages/trash_screen.dart';
 import 'package:mars_thoughts/services/service_locator.dart';
 import 'package:mars_thoughts/theme/theme_constants.dart';
 import 'package:mars_thoughts/theme/theme_manager.dart';
+import 'package:mars_thoughts/util/instant_route.dart';
 
-/// Reached by pulling down past the top of the pinned list, so it leaves the
-/// same way it came: swipe **up** and it lifts off, back to Pinned. The system
-/// back button works too.
+/// The topmost panel on `MainScreen`'s vertical axis, reached by pulling past
+/// the top of the pinned list. Positioned and dragged by `MainScreen` exactly
+/// like Pinned/Write/All — this widget owns no navigation or drag logic of
+/// its own, only its own rows' content and taps.
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
 
@@ -16,85 +19,66 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  static const _swipeUpThreshold = 96.0;
+  final _storage = getIt<LocalStorageService>();
 
-  double _dragUp = 0;
-  bool _popping = false;
-
-  /// Only upward travel counts — pulling down would mean going further into
-  /// the app, and there is nothing beyond Settings.
-  void _onDragUpdate(DragUpdateDetails d) {
-    setState(() => _dragUp = (_dragUp - d.delta.dy).clamp(0.0, 200.0));
-  }
-
-  void _onDragEnd(DragEndDetails d) {
-    final shouldPop = _dragUp >= _swipeUpThreshold;
-    setState(() => _dragUp = 0);
-    if (shouldPop && !_popping) {
-      _popping = true;
-      Navigator.of(context).maybePop();
-    }
-  }
+  late bool _animationsEnabled = _storage.getAnimationsEnabled();
 
   @override
   Widget build(BuildContext context) {
     final primary = Theme.of(context).colorScheme.primary;
     final themeManager = getIt<ThemeManager>();
 
-    return Scaffold(
-      body: SafeArea(
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onVerticalDragUpdate: _onDragUpdate,
-          onVerticalDragEnd: _onDragEnd,
-          child: Transform.translate(
-            offset: Offset(0, -_dragUp),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const SizedBox(height: 32),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(40, 0, 50, 0),
-                  child: Text(
-                    'Settings',
-                    style: TextStyle(
-                      fontSize: 30,
-                      fontWeight: FontWeight.w300,
-                      color: primary,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 40),
-                ValueListenableBuilder<ThemeMode>(
-                  valueListenable: themeManager.themeModeNotifier,
-                  builder: (context, _, _) {
-                    final isDark =
-                        Theme.of(context).brightness == Brightness.dark;
-                    return _NavRow(
-                      label: 'Appearance',
-                      trailing: isDark ? 'Dark' : 'Light',
-                      onTap: themeManager.toggleTheme,
-                    );
-                  },
-                ),
-                _NavRow(
-                  label: 'Trash',
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const TrashScreen()),
-                  ),
-                ),
-                _NavRow(
-                  label: 'About',
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const AboutScreen()),
-                  ),
-                ),
-              ],
+    return ColoredBox(
+      color: Theme.of(context).scaffoldBackgroundColor,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SizedBox(height: 32),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(40, 0, 50, 0),
+            child: Text(
+              'Settings',
+              style: TextStyle(
+                fontSize: 30,
+                fontWeight: FontWeight.w300,
+                color: primary,
+              ),
             ),
           ),
-        ),
+          const SizedBox(height: 40),
+          ValueListenableBuilder<ThemeMode>(
+            valueListenable: themeManager.themeModeNotifier,
+            builder: (context, _, _) {
+              final isDark = Theme.of(context).brightness == Brightness.dark;
+              return _NavRow(
+                label: 'Appearance',
+                trailing: isDark ? 'Dark' : 'Light',
+                onTap: themeManager.toggleTheme,
+              );
+            },
+          ),
+          _NavRow(
+            label: 'Animations',
+            trailing: _animationsEnabled ? 'On' : 'Off',
+            onTap: () {
+              setState(() => _animationsEnabled = !_animationsEnabled);
+              _storage.setAnimationsEnabled(_animationsEnabled);
+            },
+          ),
+          _NavRow(
+            label: 'Trash',
+            onTap: () =>
+                Navigator.push(context, instantRoute((_) => const TrashScreen())),
+          ),
+          _NavRow(
+            label: 'About',
+            onTap: () =>
+                Navigator.push(context, instantRoute((_) => const AboutScreen())),
+          ),
+          // MainScreen's own SafeArea only insets the top; each panel carries
+          // its own bottom inset, same as the thought lists.
+          SizedBox(height: MediaQuery.paddingOf(context).bottom),
+        ],
       ),
     );
   }

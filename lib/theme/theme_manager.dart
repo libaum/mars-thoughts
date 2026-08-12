@@ -11,13 +11,12 @@ class ThemeManager {
 
   ThemeManager() {
     final isDark = _storage.getThemeIsDark();
-    if (isDark == null) {
-      themeModeNotifier = ValueNotifier(ThemeMode.system);
-    } else {
-      themeModeNotifier = ValueNotifier(
-        isDark ? ThemeMode.dark : ThemeMode.light,
-      );
-    }
+    // No preference yet (fresh install): default to dark rather than
+    // following the system, so Appearance always reads "Dark" until the
+    // user explicitly switches it.
+    themeModeNotifier = ValueNotifier(
+      isDark ?? true ? ThemeMode.dark : ThemeMode.light,
+    );
   }
 
   void toggleTheme() {

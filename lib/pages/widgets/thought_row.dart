@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:mars_thoughts/domain/thought.dart';
@@ -6,11 +7,14 @@ import 'package:mars_thoughts/util/highlight.dart';
 import 'package:mars_thoughts/util/time_format.dart';
 
 /// One thought in a list.
-/// Tap → open, long-press → pin/unpin, swipe left → delete, swipe right → copy.
+/// Tap → open, long-press → enter selection mode, swipe left → delete, swipe
+/// right → copy.
 ///
 /// Navigation between panels is vertical, so the row's horizontal axis is free
-/// for both swipe directions. When [onDelete] is null the row has no swipe
-/// actions at all (used for the pinned list, which unpins instead).
+/// for both swipe directions. When [onDelete] is null, or while [selectionMode]
+/// is on, the row has no swipe actions at all — selection mode routes tap and
+/// long-press to selecting instead (see [MainScreen]'s selection state), and
+/// the pinned list unpins via that same selection bar rather than a swipe.
 ///
 /// When [query] is set the row shows the matching part of the thought with the
 /// query highlighted, so a search result is recognisable at a glance.
@@ -18,6 +22,8 @@ class ThoughtRow extends StatelessWidget {
   final Thought thought;
   final bool showPinIcon;
   final String query;
+  final bool selected;
+  final bool selectionMode;
   final VoidCallback onTap;
   final VoidCallback onLongPress;
   final VoidCallback? onDelete;
@@ -30,6 +36,8 @@ class ThoughtRow extends StatelessWidget {
     required this.onLongPress,
     this.onDelete,
     this.query = '',
+    this.selected = false,
+    this.selectionMode = false,
   });
 
   /// Up to three lines to show: the first non-empty lines normally, or a window
@@ -84,40 +92,57 @@ class ThoughtRow extends StatelessWidget {
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
       onLongPress: onLongPress,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text.rich(
-                    TextSpan(children: spans),
-                    maxLines: searching ? 3 : 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    formatThoughtTime(thought.updatedAt),
-                    style: TEXT_STYLE_THOUGHT_TIME,
-                  ),
-                ],
+      child: ColoredBox(
+        // A faint tint is the only cue selection needs — consistent with how
+        // dividers already use the primary colour at low alpha, no new colour.
+        color: selected
+            ? primary.withValues(alpha: 0.06)
+            : const Color(0x00000000),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text.rich(
+                      TextSpan(children: spans),
+                      maxLines: searching ? 3 : 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      formatThoughtTime(thought.updatedAt),
+                      style: TEXT_STYLE_THOUGHT_TIME,
+                    ),
+                  ],
+                ),
               ),
-            ),
-            if (showPinIcon && thought.isPinned)
-              const Padding(
-                padding: EdgeInsets.only(left: 12, top: 2),
-                child: Icon(Icons.push_pin, size: 13, color: COLOR_SECONDARY),
-              ),
-          ],
+              if (selectionMode)
+                Padding(
+                  padding: const EdgeInsets.only(left: 12, top: 2),
+                  child: Icon(
+                    selected ? Icons.check_circle : Icons.circle_outlined,
+                    size: 16,
+                    color: selected ? primary : COLOR_SECONDARY,
+                  ),
+                )
+              else if (showPinIcon && thought.isPinned)
+                const Padding(
+                  padding: EdgeInsets.only(left: 12, top: 2),
+                  child: Icon(Icons.push_pin, size: 13, color: COLOR_SECONDARY),
+                ),
+            ],
+          ),
         ),
       ),
     );
 
-    // No delete here (e.g. pinned list) → plain row, no swipe actions.
-    if (onDelete == null) return content;
+    // No delete here (e.g. pinned list), or mid-selection → plain row, no
+    // swipe actions. Selection already owns tap/long-press on the row.
+    if (onDelete == null || selectionMode) return content;
 
     return _SwipeActions(
       onDelete: onDelete!,
@@ -194,10 +219,17 @@ class _SwipeActionsState extends State<_SwipeActions> {
     return LayoutBuilder(
       builder: (context, constraints) {
         _maxReveal = constraints.maxWidth * _maxRevealFraction;
-        return GestureDetector(
+        return RawGestureDetector(
           behavior: HitTestBehavior.opaque,
-          onHorizontalDragUpdate: _onUpdate,
-          onHorizontalDragEnd: _onEnd,
+          gestures: <Type, GestureRecognizerFactory>{
+            _RowSwipeDragRecognizer:
+                GestureRecognizerFactoryWithHandlers<_RowSwipeDragRecognizer>(
+                  () => _RowSwipeDragRecognizer(),
+                  (instance) => instance
+                    ..onUpdate = _onUpdate
+                    ..onEnd = _onEnd,
+                ),
+          },
           child: Stack(
             children: [
               if (_drag != 0)
@@ -238,5 +270,42 @@ class _SwipeActionsState extends State<_SwipeActions> {
         );
       },
     );
+  }
+}
+
+/// A horizontal-drag recognizer that only commits to a row swipe once the
+/// finger has moved clearly and mostly sideways. Plain [GestureDetector]
+/// horizontal-drag handlers react to the smallest sideways wobble during an
+/// otherwise vertical list scroll, which reads as jitter; this instead
+/// mirrors [_RevealDragRecognizer] in main_screen.dart — hold off past the
+/// system touch slop, then only accept once the motion is decisively
+/// horizontal (`dx` outweighs `dy` by a wide margin), rejecting outright
+/// otherwise so the enclosing list's vertical scroll wins.
+class _RowSwipeDragRecognizer extends HorizontalDragGestureRecognizer {
+  static const _slop = 20.0;
+
+  Offset? _origin;
+
+  @override
+  void addAllowedPointer(PointerDownEvent event) {
+    _origin = event.position;
+    super.addAllowedPointer(event);
+  }
+
+  @override
+  void handleEvent(PointerEvent event) {
+    if (event is PointerMoveEvent && _origin != null) {
+      final delta = event.position - _origin!;
+      if (delta.dx.abs() > _slop || delta.dy.abs() > _slop) {
+        if (delta.dx.abs() > delta.dy.abs() * 1.5) {
+          resolve(GestureDisposition.accepted);
+        } else {
+          resolve(GestureDisposition.rejected);
+          stopTrackingPointer(event.pointer);
+          return;
+        }
+      }
+    }
+    super.handleEvent(event);
   }
 }
