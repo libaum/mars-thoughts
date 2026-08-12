@@ -13,18 +13,20 @@ const COLOR_DELETE = Color(0xFFC9184A);
 /// Background color presets offered in Settings → Appearance, kept muted
 /// and calm rather than saturated — Mars stays quiet even with a tint.
 const List<Color> LIGHT_BACKGROUND_PRESETS = [
-  Color(0xFFF3E4C8), // sand
+//  Color(0xFFF3E4C8), // sand
+  Color(0xffFEFAE0),
   Color(0xFFD9E8DA), // sage
   Color(0xFFD6E4F0), // powder blue
   Color(0xFFF0DCE0), // blush
   Color(0xFFE3DCF0), // lavender
 ];
+
 const List<Color> DARK_BACKGROUND_PRESETS = [
-  Color(0xFF141C29), // navy
-  Color(0xFF231A2C), // plum
-  Color(0xFF0F2429), // teal
-  Color(0xFF2A121B), // burgundy
-  Color(0xFF291712), // rust
+  Color(0xFF1C2740), // navy
+  Color(0xFF32243D), // plum
+  Color(0xFF17383D), // teal
+  Color(0xFF3D1B29), // burgundy
+  Color(0xFF3A2117), // rust
 ];
 
 /// Font
@@ -92,6 +94,42 @@ const TEXT_STYLE_EMPTY = TextStyle(
   color: COLOR_SECONDARY,
 );
 
+/// Dialog title
+const TEXT_STYLE_DIALOG_TITLE = TextStyle(
+  fontFamily: FONT_FAMILY,
+  fontSize: 20,
+  fontWeight: FontWeight.w300,
+);
+
+/// Dialog action button
+const TEXT_STYLE_DIALOG_BUTTON = TextStyle(
+  fontFamily: FONT_FAMILY,
+  fontSize: 14,
+  fontWeight: FontWeight.w300,
+);
+
+/// Some dialogs (background color picker) override `backgroundColor` per
+/// instance to preview a custom color, so their text can't rely on the
+/// theme's fixed dialog text color — pass the app's current brightness
+/// explicitly instead.
+ButtonStyle getDialogButtonStyle(bool isDark, {bool muted = false}) {
+  final color = isDark ? COLOR_DARK_PRIMARY : COLOR_LIGHT_PRIMARY;
+  return ButtonStyle(
+    foregroundColor: WidgetStateProperty.all<Color>(
+      muted ? color.withValues(alpha: 0.6) : color,
+    ),
+    overlayColor: WidgetStateProperty.all<Color>(
+      color.withValues(alpha: 0.08),
+    ),
+    textStyle: WidgetStateProperty.all(TEXT_STYLE_DIALOG_BUTTON),
+    shape: WidgetStateProperty.all(
+      const RoundedRectangleBorder(
+        borderRadius: BorderRadius.all(Radius.circular(3.0)),
+      ),
+    ),
+  );
+}
+
 /// Theme builders. `background` lets Settings → Appearance swap in a custom
 /// background color; text/icon colors stay pure black/white regardless.
 ThemeData buildLightTheme({Color background = COLOR_LIGHT_BACKGROUND}) =>
@@ -104,6 +142,18 @@ ThemeData buildLightTheme({Color background = COLOR_LIGHT_BACKGROUND}) =>
       fontFamily: FONT_FAMILY,
       scaffoldBackgroundColor: background,
       brightness: Brightness.light,
+      dialogTheme: DialogThemeData(
+        backgroundColor: COLOR_LIGHT_BACKGROUND,
+        surfaceTintColor: Colors.transparent,
+        clipBehavior: Clip.antiAlias,
+        contentTextStyle: const TextStyle(color: COLOR_LIGHT_PRIMARY),
+        titleTextStyle: TEXT_STYLE_DIALOG_TITLE.copyWith(
+          color: COLOR_LIGHT_PRIMARY,
+        ),
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.all(Radius.circular(4.0)),
+        ),
+      ),
       iconTheme: const IconThemeData(color: COLOR_LIGHT_PRIMARY),
       textSelectionTheme: const TextSelectionThemeData(
         cursorColor: COLOR_LIGHT_PRIMARY,
@@ -129,6 +179,19 @@ ThemeData buildDarkTheme({Color background = COLOR_DARK_BACKGROUND}) =>
       fontFamily: FONT_FAMILY,
       scaffoldBackgroundColor: background,
       brightness: Brightness.dark,
+      dialogTheme: DialogThemeData(
+        backgroundColor: COLOR_DARK_BACKGROUND,
+        surfaceTintColor: Colors.transparent,
+        clipBehavior: Clip.antiAlias,
+        contentTextStyle: const TextStyle(color: COLOR_DARK_PRIMARY),
+        titleTextStyle: TEXT_STYLE_DIALOG_TITLE.copyWith(
+          color: COLOR_DARK_PRIMARY,
+        ),
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.all(Radius.circular(4.0)),
+          side: BorderSide(color: Color(0x5FFFFFFF), width: 0.7),
+        ),
+      ),
       iconTheme: const IconThemeData(color: COLOR_DARK_PRIMARY),
       textSelectionTheme: const TextSelectionThemeData(
         cursorColor: COLOR_DARK_PRIMARY,

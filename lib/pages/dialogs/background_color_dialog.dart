@@ -21,6 +21,7 @@ class _BackgroundColorDialogState extends State<BackgroundColorDialog> {
   final _themeManager = getIt<ThemeManager>();
 
   late Color _selectedColor;
+  late HSVColor _hsvColor;
   late final Color _originalColor;
   bool _confirmed = false;
 
@@ -34,12 +35,18 @@ class _BackgroundColorDialogState extends State<BackgroundColorDialog> {
         ? _themeManager.darkBackgroundNotifier.value
         : _themeManager.lightBackgroundNotifier.value;
     _selectedColor = _originalColor;
+    _hsvColor = HSVColor.fromColor(_originalColor);
   }
 
   void _preview(Color color) {
-    setState(() => _selectedColor = color);
+    setState(() {
+      _selectedColor = color;
+      _hsvColor = HSVColor.fromColor(color);
+    });
     _apply(color);
   }
+
+  void _previewHsv(HSVColor hsv) => _preview(hsv.toColor());
 
   void _apply(Color? color) {
     if (widget.isDark) {
@@ -49,23 +56,32 @@ class _BackgroundColorDialogState extends State<BackgroundColorDialog> {
     }
   }
 
+  /// A shade of the currently selected color to ring it with — darker in
+  /// light mode, lighter in dark mode — so the selection stays visible
+  /// against any preset without relying on a fixed accent color.
+  Color get _selectionRingColor {
+    final hsl = HSLColor.fromColor(_selectedColor);
+    final lightness = widget.isDark
+        ? (hsl.lightness + 0.55).clamp(0.0, 1.0)
+        : (hsl.lightness - 0.4).clamp(0.0, 1.0);
+    return hsl.withLightness(lightness).toColor();
+  }
+
+  /// A faint version of the dialog's own text color, rather than a fixed
+  /// gray — reads more cleanly against the wide range of preset hues than
+  /// one flat tone does.
+  Color get _unselectedRingColor =>
+      (widget.isDark ? Colors.white : Colors.black).withValues(alpha: 0.3);
+
   @override
   Widget build(BuildContext context) {
-    final primary = Theme.of(context).colorScheme.primary;
-
     return PopScope(
       onPopInvokedWithResult: (didPop, _) {
         if (didPop && !_confirmed) _apply(_originalColor);
       },
       child: AlertDialog(
-        title: Text(
-          'Background color',
-          style: TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.w300,
-            color: primary,
-          ),
-        ),
+        backgroundColor: _selectedColor,
+        title: const Text('Background color'),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -83,11 +99,11 @@ class _BackgroundColorDialogState extends State<BackgroundColorDialog> {
                           height: 36,
                           decoration: BoxDecoration(
                             color: color,
-                            shape: BoxShape.circle,
+                            borderRadius: BorderRadius.circular(3.0),
                             border: Border.all(
                               color: _selectedColor == color
-                                  ? primary
-                                  : COLOR_SECONDARY,
+                                  ? _selectionRingColor
+                                  : _unselectedRingColor,
                               width: _selectedColor == color ? 2.5 : 1,
                             ),
                           ),
@@ -97,36 +113,67 @@ class _BackgroundColorDialogState extends State<BackgroundColorDialog> {
                     .toList(),
               ),
               const SizedBox(height: 16),
-              ColorPicker(
-                pickerColor: _selectedColor,
-                onColorChanged: _preview,
-                labelTypes: const [],
-                enableAlpha: false,
-                pickerAreaHeightPercent: 0.7,
+              // Built from the picker's lower-level pieces (area + hue
+              // slider) instead of the bundled `ColorPicker` widget, which
+              // always renders an extra circular swatch next to the slider —
+              // redundant here since the dialog's own background already
+              // previews the color.
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final width = constraints.maxWidth;
+                  return Column(
+                    children: [
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(4.0),
+                        child: SizedBox(
+                          width: width,
+                          height: width * 0.7,
+                          child: ColorPickerArea(
+                            _hsvColor,
+                            _previewHsv,
+                            PaletteType.hsv,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: width,
+                        height: 40,
+                        child: ColorPickerSlider(
+                          TrackType.hue,
+                          _hsvColor,
+                          _previewHsv,
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  TextButton(
+                    style: getDialogButtonStyle(widget.isDark, muted: true),
+                    onPressed: () {
+                      _confirmed = true;
+                      _apply(null);
+                      Navigator.of(context).pop();
+                    },
+                    child: const Text('Reset'),
+                  ),
+                  TextButton(
+                    style: getDialogButtonStyle(widget.isDark),
+                    onPressed: () {
+                      _confirmed = true;
+                      Navigator.of(context).pop();
+                    },
+                    child: const Text('Done'),
+                  ),
+                ],
               ),
             ],
           ),
         ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              _confirmed = true;
-              _apply(null);
-              Navigator.of(context).pop();
-            },
-            child: Text(
-              'Reset',
-              style: TextStyle(color: primary.withValues(alpha: 0.6)),
-            ),
-          ),
-          TextButton(
-            onPressed: () {
-              _confirmed = true;
-              Navigator.of(context).pop();
-            },
-            child: Text('Done', style: TextStyle(color: primary)),
-          ),
-        ],
       ),
     );
   }
