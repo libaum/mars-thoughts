@@ -88,9 +88,9 @@ class LocalStorageService {
   }
 
   /// Whether panel drags follow the finger live instead of cutting straight
-  /// to the result once the gesture resolves. Defaults off.
+  /// to the result once the gesture resolves. Defaults on.
   bool getAnimationsEnabled() =>
-      _prefs.getBool(_keyAnimationsEnabled) ?? false;
+      _prefs.getBool(_keyAnimationsEnabled) ?? true;
 
   Future<void> setAnimationsEnabled(bool enabled) async {
     await _prefs.setBool(_keyAnimationsEnabled, enabled);

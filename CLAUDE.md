@@ -100,8 +100,8 @@ bottom, opening on Write:
 - Releasing a drag snaps to whichever neighbour it committed to — by fling
   velocity (`_flingVelocity`) or by distance past `_openThreshold` — or springs
   back home otherwise (`_onPanelDragEnd`). With the **Animations** toggle in
-  Settings on, the whole stack visibly follows the finger while dragging
-  (`_animateDrag`); off (the current default) it stays put until the gesture
+  Settings on (the current default), the whole stack visibly follows the
+  finger while dragging (`_animateDrag`); off it stays put until the gesture
   resolves, then cuts straight to the result.
 - The reveal drag on Write stays live **while you type** — the editor merely
   gets first refusal on the vertical axis (`_canRevealFrom`): as long as the
