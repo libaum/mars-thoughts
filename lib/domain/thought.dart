@@ -3,7 +3,16 @@ class Thought {
   final String id;
   final String text;
   final DateTime createdAt;
+
+  /// When the text last changed. Drives list order ("newest-updated first"),
+  /// so pinning or trashing deliberately leaves it alone — those shouldn't
+  /// reshuffle the list.
   final DateTime updatedAt;
+
+  /// When *anything* about this thought last changed — text, pin, trash,
+  /// restore. Unlike [updatedAt] it moves on every mutation, which is what
+  /// makes it usable as the sync clock for last-write-wins.
+  final DateTime changedAt;
 
   /// When the thought was pinned. `null` means not pinned.
   final DateTime? pinnedAt;
@@ -16,9 +25,10 @@ class Thought {
     required this.text,
     required this.createdAt,
     required this.updatedAt,
+    DateTime? changedAt,
     this.pinnedAt,
     this.deletedAt,
-  });
+  }) : changedAt = changedAt ?? updatedAt;
 
   bool get isPinned => pinnedAt != null;
 
@@ -36,6 +46,7 @@ class Thought {
   Thought copyWith({
     String? text,
     DateTime? updatedAt,
+    DateTime? changedAt,
     DateTime? pinnedAt,
     bool clearPinned = false,
     DateTime? deletedAt,
@@ -46,6 +57,7 @@ class Thought {
       text: text ?? this.text,
       createdAt: createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      changedAt: changedAt ?? this.changedAt,
       pinnedAt: clearPinned ? null : (pinnedAt ?? this.pinnedAt),
       deletedAt: clearDeleted ? null : (deletedAt ?? this.deletedAt),
     );
@@ -56,18 +68,23 @@ class Thought {
     'text': text,
     'createdAt': createdAt.millisecondsSinceEpoch,
     'updatedAt': updatedAt.millisecondsSinceEpoch,
+    'changedAt': changedAt.millisecondsSinceEpoch,
     'pinnedAt': pinnedAt?.millisecondsSinceEpoch,
     'deletedAt': deletedAt?.millisecondsSinceEpoch,
   };
 
   factory Thought.fromJson(Map<String, dynamic> json) {
+    final updatedMs = json['updatedAt'] as int;
+    // Thoughts stored before `changedAt` existed fall back to `updatedAt`.
+    final changedMs = json['changedAt'] as int? ?? updatedMs;
     final pinnedMs = json['pinnedAt'] as int?;
     final deletedMs = json['deletedAt'] as int?;
     return Thought(
       id: json['id'] as String,
       text: json['text'] as String,
       createdAt: DateTime.fromMillisecondsSinceEpoch(json['createdAt'] as int),
-      updatedAt: DateTime.fromMillisecondsSinceEpoch(json['updatedAt'] as int),
+      updatedAt: DateTime.fromMillisecondsSinceEpoch(updatedMs),
+      changedAt: DateTime.fromMillisecondsSinceEpoch(changedMs),
       pinnedAt: pinnedMs == null
           ? null
           : DateTime.fromMillisecondsSinceEpoch(pinnedMs),

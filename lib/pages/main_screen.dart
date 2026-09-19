@@ -9,6 +9,8 @@ import 'package:mars_thoughts/logic/thoughts_manager.dart';
 import 'package:mars_thoughts/pages/settings_screen.dart';
 import 'package:mars_thoughts/pages/widgets/thought_row.dart';
 import 'package:mars_thoughts/services/service_locator.dart';
+import 'package:mars_thoughts/sync/sync_flags.dart';
+import 'package:mars_thoughts/sync/sync_service.dart';
 import 'package:mars_thoughts/theme/theme_constants.dart';
 
 /// Four panels stacked on one continuous vertical axis, top to bottom:
@@ -122,6 +124,13 @@ class _MainScreenState extends State<MainScreen>
     _searchController.addListener(() {
       setState(() => _query = _searchController.text.trim().toLowerCase());
     });
+    // A cold launch doesn't replay `resumed` to observers added here, so kick
+    // the first sync round off explicitly once the first frame is up.
+    if (kSyncEnabled) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        getIt<SyncService>().syncNow();
+      });
+    }
   }
 
   @override
@@ -141,6 +150,15 @@ class _MainScreenState extends State<MainScreen>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.paused) _fileDraftOnBackground();
+    // Personal flavor: sync on the way out (after the draft is filed, so it
+    // travels too) and on the way back in. Both are best-effort — the OS may
+    // kill a backgrounded process mid-request, and the next resume repeats
+    // whatever didn't land.
+    if (kSyncEnabled &&
+        (state == AppLifecycleState.paused ||
+            state == AppLifecycleState.resumed)) {
+      getIt<SyncService>().syncNow();
+    }
   }
 
   /// Debounced so a fast typist doesn't hit SharedPreferences on every

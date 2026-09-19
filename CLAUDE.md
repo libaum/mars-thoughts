@@ -16,11 +16,12 @@ own — auto-popping it felt pushy, so capture starts the moment you tap.
 ## Common Commands
 
 ```bash
-flutter run            # Run app
-flutter test           # Run tests
-flutter analyze        # Lint / static analysis
-./install_debug.sh     # Debug (app: "Mars Thoughts Debug", pkg: com.catchingclouds.marsthoughts.debug)
-./install_release.sh   # Release (app: "Mars Thoughts", pkg: com.catchingclouds.marsthoughts)
+flutter run --flavor store   # Run app (a --flavor is mandatory now, see Build Variants)
+flutter test                 # Run tests
+flutter analyze              # Lint / static analysis
+./install_debug.sh           # Store debug ("Mars Thoughts Debug"); FLAVOR=personal for the sync build
+./install_release.sh         # Store release ("Mars Thoughts", pkg: com.catchingclouds.marsthoughts)
+./install_personal.sh        # Personal release ("Mars Thoughts Personal", pkg: …marsthoughts.personal)
 ```
 
 ### Release (fastlane, from `android/`)
@@ -46,17 +47,43 @@ Follows the shared Mars conventions (see ../DESIGN.md). Reference app: ../mars_f
   `main()` before `runApp`. `LocalStorageService` (async) is registered first.
 - **State**: `ValueNotifier` + `ValueListenableBuilder`. No Bloc/Provider/Riverpod.
 - **Persistence**: SharedPreferences only, local. Thoughts are stored as a JSON
-  list under one key. No backend, no sync.
+  list under one key. The store flavor has no backend and no sync — the
+  personal flavor layers an opt-in sync on top (see Sync below) without
+  changing that: local storage stays the source of truth.
 
 ### Key Classes
 
 | Class | Responsibility |
 |---|---|
-| `Thought` (`domain/`) | Immutable model: id, text, createdAt, updatedAt, pinnedAt, deletedAt. `preview` = first non-empty line. `isDeleted` = in trash. |
-| `LocalStorageService` (`data/`) | SharedPreferences wrapper — JSON list of thoughts, theme flag, draft, and one-time hint/tutorial flags, plus the `Animations` toggle (`getAnimationsEnabled`/`setAnimationsEnabled`). |
-| `ThoughtsManager` (`logic/`) | Single source of truth (`thoughtsNotifier`, all stored thoughts, newest first). Derives `active` / `pinned` / `trash`. `delete` soft-deletes to trash; `restore` / `purge` / `emptyTrash` manage it. `togglePinMany`/`deleteMany` do the same in one batch commit for multi-select. Each persists immediately. |
+| `Thought` (`domain/`) | Immutable model: id, text, createdAt, updatedAt, changedAt, pinnedAt, deletedAt. `preview` = first non-empty line. `isDeleted` = in trash. `updatedAt` = last *text* edit (drives list order); `changedAt` = last change of *any* kind (pin, trash, restore too) — the sync clock. Legacy JSON without `changedAt` falls back to `updatedAt`. |
+| `LocalStorageService` (`data/`) | SharedPreferences wrapper — JSON list of thoughts, theme flag, draft, and one-time hint/tutorial flags, plus the `Animations` toggle (`getAnimationsEnabled`/`setAnimationsEnabled`). The `sync_*` keys at the bottom (purged ids, hub URL, last-sync watermark) are only read by the personal flavor. |
+| `ThoughtsManager` (`logic/`) | Single source of truth (`thoughtsNotifier`, all stored thoughts, newest first). Derives `active` / `pinned` / `trash`. `delete` soft-deletes to trash; `restore` / `purge` / `emptyTrash` manage it. `togglePinMany`/`deleteMany` do the same in one batch commit for multi-select. Each persists immediately and stamps `changedAt`. `applySynced` writes remote edits *without* restamping. Purges are remembered for sync when `recordPurges` (defaults to the flavor flag). |
 | `ThemeManager` (`theme/`) | Light/dark, toggled from Settings. No preference yet defaults to dark (not system) — see `ThemeManager()`. |
-| `ShowcaseDataSource` (`data/`) | Curated example thoughts that seed the app for Play Store screenshots. Gated by `enabled` (`kDebugMode`), wired in `service_locator.dart` — every debug build starts with this data, overwriting whatever was stored. |
+| `ShowcaseDataSource` (`data/`) | Curated example thoughts that seed the app for Play Store screenshots. Gated by `enabled` (`kDebugMode && !kSyncEnabled`), wired in `service_locator.dart` — every *store* debug build starts with this data, overwriting whatever was stored. Never in the personal flavor, or the fake thoughts would sync to the hub. |
+| `SyncService` (`sync/`) | Personal flavor only. Pairing state (hub URL + device token + encryption key), builds the `MarsSyncEngine`, and `syncNow()` (overlapping calls collapse into one). Status via `statusNotifier`. |
+| `ThoughtsSyncRepository` (`sync/`) | Personal flavor only. Maps thoughts onto `mars_sync`'s generic items: whole `Thought` as payload, ordered by `changedAt`; a *purge* becomes a tombstone, trashing is just an edit. |
+| `SecureSyncKeyStore` (`sync/`) | Personal flavor only. Device token, encryption key and device id in Keystore-backed `flutter_secure_storage`, never SharedPreferences. |
+
+### Sync (personal flavor only)
+
+Built on the shared `../mars_sync` package (client) and `../mars_sync_hub`
+(server) — read `../mars_sync_hub/SECURITY.md` before touching anything here.
+
+- Gate: `kSyncEnabled` in `lib/sync/sync_flags.dart` is `appFlavor == 'personal'`,
+  a compile-time constant. In the store flavor every `if (kSyncEnabled)` branch
+  is dead code and tree-shaken out — verified: the store release's AOT snapshot
+  contains no sync strings at all. Never gate on a runtime value instead.
+- Local storage stays the source of truth; the hub is a relay. Bidirectional,
+  last-write-wins by `changedAt`, deterministic tie-break by device id.
+- Payloads are AES-256-GCM encrypted on device before they leave; the hub only
+  ever sees ciphertext. One key for all your devices, generated once, moved
+  between devices by hand (Settings → Sync → Show/Paste) — never via the hub.
+  **Losing the key makes everything on the hub unreadable; back it up.**
+- Triggers: cold launch (post-frame), `resumed`, and `paused` (after the draft
+  is filed, so it travels too), plus "Sync now" in Settings → Sync. All
+  best-effort; errors land in `SyncStatus`, never in the UI flow.
+- Known limit: if a thought is purged on another device while it's loaded in
+  the editor here, leaving Write drops the edit (`update` finds no id).
 
 ## Screens & Interactions
 
@@ -189,8 +216,10 @@ bottom, opening on Write:
 ## Deliberately Out of Scope (v1)
 
 No AI, no voice input, no Markdown, no folders, no tags, no images, no titles,
-no checklists, no sync, no templates. A private build may later add voice/AI
-transcription behind a flag — never in the public app (API-cost reasons).
+no checklists, no templates. No sync **in the public app** — the `personal`
+flavor has it (see Sync above), the `store` flavor never will. A private build
+may likewise later add voice/AI transcription behind the same flavor — never
+in the public app (API-cost reasons).
 
 ## Design Conventions
 
@@ -200,9 +229,20 @@ transcription behind a flag — never in the public app (API-cost reasons).
 
 ## Build Variants
 
-| Variant | Package Name | App Name |
-|---------|-------------|----------|
-| Debug | `com.catchingclouds.marsthoughts.debug` | Mars Thoughts Debug |
-| Release | `com.catchingclouds.marsthoughts` | Mars Thoughts |
+Two product flavors (`store`, `personal`) × two build types (debug, release).
+Gradle requires `--flavor` on every build now; the scripts and the Fastfile
+pass it for you.
 
-Both can be installed simultaneously on the same device.
+| Variant | Package Name | App Name | INTERNET |
+|---------|-------------|----------|----------|
+| storeDebug | `com.catchingclouds.marsthoughts.debug` | Mars Thoughts Debug | yes (Flutter tooling only) |
+| storeRelease | `com.catchingclouds.marsthoughts` | Mars Thoughts | **no** |
+| personalDebug | `com.catchingclouds.marsthoughts.personal.debug` | Mars Thoughts Personal Debug | yes |
+| personalRelease | `com.catchingclouds.marsthoughts.personal` | Mars Thoughts Personal | yes |
+
+All four can be installed simultaneously on the same device. The label is
+assembled per variant in `android/app/build.gradle.kts` (`appLabel`
+placeholder); the INTERNET permission comes from
+`android/app/src/personal/AndroidManifest.xml` (and the debug/profile ones
+for tooling). Only `store` ever goes to the Play Store (`fastlane` builds
+`--flavor store`).

@@ -1,0 +1,6 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- The personal flavor talks to the sync hub; the store flavor never
+         gets this permission (only its debug/profile build types do, for the
+         Flutter tooling, and those never ship). -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+</manifest>

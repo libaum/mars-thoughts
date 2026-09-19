@@ -51,6 +51,36 @@ android {
             signingConfig = signingConfigs.getByName("release")
         }
     }
+
+    // `store` is the Play Store app exactly as before. `personal` is the
+    // private build with sync: its own applicationId so it installs next to
+    // the store app, and the only variant whose manifest declares INTERNET
+    // (see src/personal/AndroidManifest.xml). The Dart side keys off the same
+    // flavor name (lib/sync/sync_flags.dart).
+    flavorDimensions += "distribution"
+    productFlavors {
+        create("store") {
+            dimension = "distribution"
+        }
+        create("personal") {
+            dimension = "distribution"
+            applicationIdSuffix = ".personal"
+        }
+    }
+}
+
+// One label per variant, built from flavor + build type, so the four
+// installable combinations are told apart on the launcher. Placeholders
+// merged from flavor *and* build type would otherwise overwrite each other.
+androidComponents {
+    onVariants { variant ->
+        val label = buildString {
+            append("Mars Thoughts")
+            if (variant.flavorName == "personal") append(" Personal")
+            if (variant.buildType == "debug") append(" Debug")
+        }
+        variant.manifestPlaceholders.put("appLabel", label)
+    }
 }
 
 flutter {

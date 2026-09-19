@@ -3,9 +3,14 @@ import 'package:mars_thoughts/domain/thought.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Thin wrapper around SharedPreferences for persisting app state.
-/// Local only — no backend, no sync.
+/// Local only. The `sync_*` keys at the bottom are read exclusively by the
+/// personal flavor's sync layer (see lib/sync/) and stay untouched in the
+/// store flavor.
 class LocalStorageService {
   static const _keyThoughts = 'thoughts';
+  static const _keySyncPurged = 'sync_purged';
+  static const _keySyncServerUrl = 'sync_server_url';
+  static const _keySyncLastSyncedAt = 'sync_last_synced_at';
   static const _keyThemeIsDark = 'theme_is_dark';
   static const _keySettingsHintSeen = 'settings_hint_seen';
   static const _keyDraftText = 'draft_text';
@@ -125,6 +130,55 @@ class LocalStorageService {
       await _prefs.remove(_keyDarkBackground);
     } else {
       await _prefs.setInt(_keyDarkBackground, argb);
+    }
+  }
+
+  // ── Sync (personal flavor only) ──────────────────────────────────────────
+
+  /// Ids of thoughts permanently removed from the trash, with the time it
+  /// happened. Once a thought is purged it's gone from the list, so this is
+  /// the only trace the sync layer has left to tell other devices to drop
+  /// their copy too. Pruned again after a successful sync.
+  Map<String, DateTime> getSyncPurged() {
+    final json = _prefs.getString(_keySyncPurged);
+    if (json == null) return {};
+    try {
+      final map = jsonDecode(json) as Map<String, dynamic>;
+      return map.map(
+        (id, ms) => MapEntry(id, DateTime.fromMillisecondsSinceEpoch(ms as int)),
+      );
+    } catch (_) {
+      return {};
+    }
+  }
+
+  Future<void> setSyncPurged(Map<String, DateTime> purged) async {
+    final json = jsonEncode(
+      purged.map((id, at) => MapEntry(id, at.millisecondsSinceEpoch)),
+    );
+    await _prefs.setString(_keySyncPurged, json);
+  }
+
+  String? getSyncServerUrl() => _prefs.getString(_keySyncServerUrl);
+
+  Future<void> setSyncServerUrl(String? url) async {
+    if (url == null) {
+      await _prefs.remove(_keySyncServerUrl);
+    } else {
+      await _prefs.setString(_keySyncServerUrl, url);
+    }
+  }
+
+  DateTime? getSyncLastSyncedAt() {
+    final ms = _prefs.getInt(_keySyncLastSyncedAt);
+    return ms == null ? null : DateTime.fromMillisecondsSinceEpoch(ms);
+  }
+
+  Future<void> setSyncLastSyncedAt(DateTime? at) async {
+    if (at == null) {
+      await _prefs.remove(_keySyncLastSyncedAt);
+    } else {
+      await _prefs.setInt(_keySyncLastSyncedAt, at.millisecondsSinceEpoch);
     }
   }
 }

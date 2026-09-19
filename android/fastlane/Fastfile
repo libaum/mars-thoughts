@@ -11,12 +11,13 @@ platform :android do
     sh("grep '^version:' ../../pubspec.yaml | sed 's/.*+//'").strip.to_i
   end
 
-  # Builds the Flutter release AAB
+  # Builds the Flutter release AAB. Always the `store` flavor — the `personal`
+  # flavor (private build with sync) never goes anywhere near the Play Store.
   private_lane :build_flutter_aab do
     Dir.chdir("../..") do
       sh("flutter clean")
       sh("flutter pub get")
-      sh("flutter build appbundle --release")
+      sh("flutter build appbundle --release --flavor store")
     end
   end
 
@@ -26,8 +27,8 @@ platform :android do
   private_lane :upload_aab do |options|
     supply(
       track: options[:track],
-      aab: "../build/app/outputs/bundle/release/app-release.aab",
-      mapping: "../build/app/outputs/mapping/release/mapping.txt",
+      aab: "../build/app/outputs/bundle/storeRelease/app-store-release.aab",
+      mapping: "../build/app/outputs/mapping/storeRelease/mapping.txt",
       version_code: current_version_code,
       skip_upload_metadata: true,
       skip_upload_images: true,

@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:mars_thoughts/data/local_storage_service.dart';
 import 'package:mars_thoughts/domain/thought.dart';
 import 'package:mars_thoughts/services/service_locator.dart';
+import 'package:mars_thoughts/sync/sync_flags.dart';
 
 /// Core state for the app: the list of captured thoughts.
 ///
@@ -9,13 +10,23 @@ import 'package:mars_thoughts/services/service_locator.dart';
 /// and derives `active` / `pinned` / `trash` views from it. Deleting a thought
 /// is non-destructive: it moves to the trash, where it can be restored or
 /// purged. Every mutation persists immediately — no save button anywhere.
+///
+/// Every user-driven mutation stamps `changedAt` on the thoughts it touches;
+/// that's the clock the personal flavor's sync layer orders edits by. Remote
+/// edits come in through [applySynced], which deliberately leaves the stamps
+/// it's given alone.
 class ThoughtsManager {
   final _storage = getIt<LocalStorageService>();
+
+  /// Whether purges leave a trace for the sync layer. Defaults to the build
+  /// flavor; tests pass `true` explicitly since they run without a flavor.
+  final bool _recordPurges;
 
   /// Every stored thought (live + trashed), sorted newest-updated first.
   late final ValueNotifier<List<Thought>> thoughtsNotifier;
 
-  ThoughtsManager() {
+  ThoughtsManager({bool recordPurges = kSyncEnabled})
+      : _recordPurges = recordPurges {
     final thoughts = _storage.getThoughts();
     _sortByUpdated(thoughts);
     thoughtsNotifier = ValueNotifier(thoughts);
@@ -50,6 +61,7 @@ class ThoughtsManager {
       text: text,
       createdAt: now,
       updatedAt: now,
+      changedAt: now,
     );
     _commit([thought, ..._thoughts]);
     return thought;
@@ -62,10 +74,11 @@ class ThoughtsManager {
       delete(id);
       return;
     }
+    final now = DateTime.now();
     final updated = _thoughts.map((t) {
       if (t.id != id) return t;
       if (t.text == text) return t;
-      return t.copyWith(text: text, updatedAt: DateTime.now());
+      return t.copyWith(text: text, updatedAt: now, changedAt: now);
     }).toList();
     _commit(updated);
   }
@@ -73,39 +86,44 @@ class ThoughtsManager {
   /// Moves a thought to the trash (recoverable). Unpins it on the way out so
   /// the trash never holds pinned items.
   void delete(String id) {
+    final now = DateTime.now();
     final updated = _thoughts.map((t) {
       if (t.id != id) return t;
-      return t.copyWith(deletedAt: DateTime.now(), clearPinned: true);
+      return t.copyWith(deletedAt: now, changedAt: now, clearPinned: true);
     }).toList();
     _commit(updated);
   }
 
   /// Brings a trashed thought back to life.
   void restore(String id) {
+    final now = DateTime.now();
     final updated = _thoughts.map((t) {
       if (t.id != id) return t;
-      return t.copyWith(clearDeleted: true);
+      return t.copyWith(clearDeleted: true, changedAt: now);
     }).toList();
     _commit(updated);
   }
 
   /// Permanently removes a single trashed thought.
   void purge(String id) {
+    _recordPurged({id});
     _commit(_thoughts.where((t) => t.id != id).toList());
   }
 
   /// Permanently removes everything in the trash.
   void emptyTrash() {
+    _recordPurged(_thoughts.where((t) => t.isDeleted).map((t) => t.id).toSet());
     _commit(_thoughts.where((t) => !t.isDeleted).toList());
   }
 
   /// Pins an unpinned thought / unpins a pinned one.
   void togglePin(String id) {
+    final now = DateTime.now();
     final updated = _thoughts.map((t) {
       if (t.id != id) return t;
       return t.isPinned
-          ? t.copyWith(clearPinned: true)
-          : t.copyWith(pinnedAt: DateTime.now());
+          ? t.copyWith(clearPinned: true, changedAt: now)
+          : t.copyWith(pinnedAt: now, changedAt: now);
     }).toList();
     _commit(updated);
   }
@@ -117,7 +135,9 @@ class ThoughtsManager {
     final pinAll = _thoughts.any((t) => ids.contains(t.id) && !t.isPinned);
     final updated = _thoughts.map((t) {
       if (!ids.contains(t.id)) return t;
-      return pinAll ? t.copyWith(pinnedAt: now) : t.copyWith(clearPinned: true);
+      return pinAll
+          ? t.copyWith(pinnedAt: now, changedAt: now)
+          : t.copyWith(clearPinned: true, changedAt: now);
     }).toList();
     _commit(updated);
   }
@@ -127,9 +147,34 @@ class ThoughtsManager {
     final now = DateTime.now();
     final updated = _thoughts.map((t) {
       if (!ids.contains(t.id)) return t;
-      return t.copyWith(deletedAt: now, clearPinned: true);
+      return t.copyWith(deletedAt: now, changedAt: now, clearPinned: true);
     }).toList();
     _commit(updated);
+  }
+
+  /// Writes the outcome of a sync round: [upserts] replace or add thoughts
+  /// by id exactly as given (their `changedAt` is the remote device's, not
+  /// now), [removedIds] are dropped outright — they were purged elsewhere.
+  void applySynced(List<Thought> upserts, Set<String> removedIds) {
+    if (upserts.isEmpty && removedIds.isEmpty) return;
+    final byId = {for (final t in _thoughts) t.id: t};
+    for (final t in upserts) {
+      byId[t.id] = t;
+    }
+    removedIds.forEach(byId.remove);
+    _commit(byId.values.toList());
+  }
+
+  /// Remembers purged ids so the sync layer can still tell other devices
+  /// about them after the thoughts themselves are gone from the list.
+  void _recordPurged(Set<String> ids) {
+    if (!_recordPurges || ids.isEmpty) return;
+    final purged = _storage.getSyncPurged();
+    final now = DateTime.now();
+    for (final id in ids) {
+      purged[id] = now;
+    }
+    _storage.setSyncPurged(purged);
   }
 
   /// Sorts, persists, and publishes a new thought list.

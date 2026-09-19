@@ -13,6 +13,11 @@ dependencies:
   get_it: ^9.0.0
   url_launcher: ^6.3.0
   flutter_colorpicker: ^1.1.0
+  # Personal flavor only — see lib/sync/sync_flags.dart. The store flavor
+  # compiles the whole sync code path out behind a const flag.
+  mars_sync:
+    path: ../mars_sync
+  flutter_secure_storage: ^9.2.2
 
 dev_dependencies:
   flutter_test:
