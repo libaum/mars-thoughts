@@ -11,6 +11,7 @@ class LocalStorageService {
   static const _keySyncPurged = 'sync_purged';
   static const _keySyncServerUrl = 'sync_server_url';
   static const _keySyncLastSyncedAt = 'sync_last_synced_at';
+  static const _keySyncLastSeenSeq = 'sync_last_seen_seq';
   static const _keyThemeIsDark = 'theme_is_dark';
   static const _keySettingsHintSeen = 'settings_hint_seen';
   static const _keyDraftText = 'draft_text';
@@ -179,6 +180,18 @@ class LocalStorageService {
       await _prefs.remove(_keySyncLastSyncedAt);
     } else {
       await _prefs.setInt(_keySyncLastSyncedAt, at.millisecondsSinceEpoch);
+    }
+  }
+
+  /// Hub sequence number up to which this device has pulled. Independent of
+  /// [getSyncLastSyncedAt], which is the *push* watermark on the local clock.
+  int getSyncLastSeenSeq() => _prefs.getInt(_keySyncLastSeenSeq) ?? 0;
+
+  Future<void> setSyncLastSeenSeq(int? seq) async {
+    if (seq == null) {
+      await _prefs.remove(_keySyncLastSeenSeq);
+    } else {
+      await _prefs.setInt(_keySyncLastSeenSeq, seq);
     }
   }
 }

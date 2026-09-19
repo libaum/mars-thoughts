@@ -90,6 +90,13 @@ class _MainScreenState extends State<MainScreen>
   /// very same field, so every gesture here works the same either way.
   String? _editingId;
 
+  /// The text the loaded thought had when it entered the editor (or was last
+  /// written back). Saving compares against this, not against storage:
+  /// storage may have moved underneath us — a sync can apply another
+  /// device's edit while a thought sits open here — and an untouched editor
+  /// must never write its stale copy over that.
+  String? _editingBaseline;
+
   // Persists the draft to disk a little after typing settles, so an OS kill
   // in the background can't lose it — but not on every keystroke.
   Timer? _draftSaveTimer;
@@ -109,6 +116,7 @@ class _MainScreenState extends State<MainScreen>
       value: _slotWrite,
     );
     _editingId = _storage.getDraftEditingId();
+    _editingBaseline = _storedTextFor(_editingId);
     final draft = _storage.getDraftText();
     if (draft.isNotEmpty) {
       _editorController.text = draft;
@@ -127,15 +135,61 @@ class _MainScreenState extends State<MainScreen>
     // A cold launch doesn't replay `resumed` to observers added here, so kick
     // the first sync round off explicitly once the first frame is up.
     if (kSyncEnabled) {
+      _manager.thoughtsNotifier.addListener(_followRemoteEditOfOpenThought);
       WidgetsBinding.instance.addPostFrameCallback((_) {
         getIt<SyncService>().syncNow();
       });
     }
   }
 
+  String? _storedTextFor(String? id) {
+    if (id == null) return null;
+    for (final t in _manager.thoughtsNotifier.value) {
+      if (t.id == id) return t.text;
+    }
+    return null;
+  }
+
+  /// Sync applied something while a thought is open in the editor. If the
+  /// editor is untouched, follow along (or empty out if the thought was purged
+  /// elsewhere); if the user has typed, leave their text alone — their next
+  /// save wins by last-write-wins, which is the honest outcome.
+  void _followRemoteEditOfOpenThought() {
+    final id = _editingId;
+    if (id == null) return;
+    final stored = _storedTextFor(id);
+    if (stored == _editingBaseline) return;
+    if (_editorController.text != _editingBaseline) return;
+    if (stored == null) {
+      setState(() {
+        _editingId = null;
+        _editingBaseline = null;
+      });
+      _editorController.clear();
+      _storage.clearDraft();
+      return;
+    }
+    _editingBaseline = stored;
+    _editorController.text = stored;
+    _editorController.selection = TextSelection.collapsed(offset: stored.length);
+  }
+
+  /// Writes the editor back to [id] only if it actually differs from what was
+  /// loaded — see [_editingBaseline].
+  void _writeBackIfChanged(String id, String text) {
+    if (text == _editingBaseline) return;
+    // Baseline first: the notifier fires synchronously inside update(), and
+    // the listener must see this as our own write, not a remote one.
+    _editingBaseline = text;
+    _manager.update(id, text);
+  }
+
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    if (kSyncEnabled) {
+      _manager.thoughtsNotifier.removeListener(_followRemoteEditOfOpenThought);
+    }
     _draftSaveTimer?.cancel();
     _navController.dispose();
     _editorController.dispose();
@@ -179,8 +233,11 @@ class _MainScreenState extends State<MainScreen>
     final text = _editorController.text;
     if (id != null) {
       // An emptied thought goes to the trash; the manager handles that.
-      _manager.update(id, text);
-      setState(() => _editingId = null);
+      _writeBackIfChanged(id, text);
+      setState(() {
+        _editingId = null;
+        _editingBaseline = null;
+      });
     } else if (text.trim().isNotEmpty) {
       _manager.create(text);
     }
@@ -200,7 +257,7 @@ class _MainScreenState extends State<MainScreen>
     _storage.setDraft(_editorController.text, _editingId);
     final id = _editingId;
     if (id == null || _editorController.text.trim().isEmpty) return;
-    _manager.update(id, _editorController.text);
+    _writeBackIfChanged(id, _editorController.text);
   }
 
   /// Called when the app is backgrounded — as opposed to just moving between
@@ -219,10 +276,13 @@ class _MainScreenState extends State<MainScreen>
     if (text.trim().isNotEmpty) {
       final id = _editingId;
       if (id != null) {
-        _manager.update(id, text);
+        _writeBackIfChanged(id, text);
       } else {
         final thought = _manager.create(text);
-        setState(() => _editingId = thought?.id);
+        setState(() {
+          _editingId = thought?.id;
+          _editingBaseline = thought?.text;
+        });
       }
     }
     _draftSaveTimer?.cancel();
@@ -291,7 +351,10 @@ class _MainScreenState extends State<MainScreen>
   /// pushy, so it only appears once the user taps into the field themselves.
   void _editInWritePanel(Thought thought) {
     _commitDraft();
-    setState(() => _editingId = thought.id);
+    setState(() {
+      _editingId = thought.id;
+      _editingBaseline = thought.text;
+    });
     _editorController.text = thought.text;
     _editorController.selection = TextSelection.collapsed(
       offset: thought.text.length,

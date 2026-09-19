@@ -64,13 +64,17 @@ class ThoughtsSyncRepository implements SyncRepository {
   @override
   Future<void> applyRemoteItems(List<SyncItem> items) async {
     final upserts = <Thought>[];
-    final removed = <String>{};
+    final removed = <String, DateTime>{};
     for (final item in items) {
       if (item.isDeleted) {
-        removed.add(item.itemId);
-      } else {
-        upserts.add(Thought.fromJson(item.payload));
+        removed[item.itemId] = item.updatedAt;
+        continue;
       }
+      // The envelope's id is authenticated (AAD); the payload's id must agree
+      // or the payload is not what the hub claims it is.
+      if (item.payload['id'] != item.itemId) continue;
+      final thought = Thought.fromJson(item.payload);
+      upserts.add(thought.copyWith(changedAt: item.updatedAt));
     }
     _manager.applySynced(upserts, removed);
   }
@@ -87,4 +91,10 @@ class ThoughtsSyncRepository implements SyncRepository {
       ..removeWhere((_, at) => at.isBefore(time));
     await _storage.setSyncPurged(purged);
   }
+
+  @override
+  Future<int> lastSeenSeq() async => _storage.getSyncLastSeenSeq();
+
+  @override
+  Future<void> setLastSeenSeq(int seq) => _storage.setSyncLastSeenSeq(seq);
 }

@@ -89,11 +89,33 @@ void main() {
         changedAt: DateTime(2026, 1, 3),
       );
 
-      manager.applySynced([remote], {local.id});
+      manager.applySynced([remote], {local.id: DateTime.now()});
 
       final all = manager.thoughtsNotifier.value;
       expect(all.map((t) => t.id), ['remote-1']);
       expect(all.single.changedAt, DateTime(2026, 1, 3));
+    });
+
+    test('applySynced leaves a locally newer thought alone (edit during round)', () {
+      final local = manager.create('typed while syncing')!;
+      final stale = Thought(
+        id: local.id,
+        text: 'older remote',
+        createdAt: local.createdAt,
+        updatedAt: local.updatedAt,
+        changedAt: local.changedAt.subtract(const Duration(seconds: 5)),
+      );
+
+      manager.applySynced([stale], {});
+      expect(manager.thoughtsNotifier.value.single.text, 'typed while syncing');
+
+      // A tombstone older than the local change is ignored too.
+      manager.applySynced([], {local.id: local.changedAt.subtract(const Duration(seconds: 1))});
+      expect(manager.thoughtsNotifier.value, hasLength(1));
+
+      // But a newer tombstone wins.
+      manager.applySynced([], {local.id: local.changedAt.add(const Duration(seconds: 1))});
+      expect(manager.thoughtsNotifier.value, isEmpty);
     });
   });
 
@@ -187,6 +209,32 @@ void main() {
       ]);
 
       expect(manager.thoughtsNotifier.value.map((t) => t.id), ['r1']);
+    });
+
+    test('applyRemoteItems ignores a payload whose id disagrees with the envelope', () async {
+      final smuggled = Thought(
+        id: 'other',
+        text: 'relabelled',
+        createdAt: DateTime(2026, 1, 1),
+        updatedAt: DateTime(2026, 1, 1),
+      );
+      await repo.applyRemoteItems([
+        SyncItem(
+          itemId: 'r1',
+          moduleId: 'mars_thoughts',
+          deviceId: 'laptop',
+          updatedAt: DateTime(2026, 1, 1),
+          payload: smuggled.toJson(),
+        ),
+      ]);
+      expect(manager.thoughtsNotifier.value, isEmpty);
+    });
+
+    test('pull watermark (seq) is stored separately from the push watermark', () async {
+      expect(await repo.lastSeenSeq(), 0);
+      await repo.setLastSeenSeq(42);
+      expect(await repo.lastSeenSeq(), 42);
+      expect(await repo.lastSyncedAt(), isNull);
     });
 
     test('setLastSyncedAt stores the watermark and prunes pushed purges', () async {

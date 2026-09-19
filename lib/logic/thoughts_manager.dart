@@ -154,15 +154,30 @@ class ThoughtsManager {
 
   /// Writes the outcome of a sync round: [upserts] replace or add thoughts
   /// by id exactly as given (their `changedAt` is the remote device's, not
-  /// now), [removedIds] are dropped outright — they were purged elsewhere.
-  void applySynced(List<Thought> upserts, Set<String> removedIds) {
-    if (upserts.isEmpty && removedIds.isEmpty) return;
+  /// now), [removed] maps ids purged elsewhere to when that happened.
+  ///
+  /// Anything changed locally *after* the incoming stamp is left alone: the
+  /// sync engine resolved conflicts against a snapshot from the start of its
+  /// round, and the user may well have typed, pinned or trashed something
+  /// while the network round trip was in flight.
+  void applySynced(List<Thought> upserts, Map<String, DateTime> removed) {
+    if (upserts.isEmpty && removed.isEmpty) return;
     final byId = {for (final t in _thoughts) t.id: t};
+    var changed = false;
     for (final t in upserts) {
+      final existing = byId[t.id];
+      if (existing != null && existing.changedAt.isAfter(t.changedAt)) continue;
       byId[t.id] = t;
+      changed = true;
     }
-    removedIds.forEach(byId.remove);
-    _commit(byId.values.toList());
+    for (final entry in removed.entries) {
+      final existing = byId[entry.key];
+      if (existing == null) continue;
+      if (existing.changedAt.isAfter(entry.value)) continue;
+      byId.remove(entry.key);
+      changed = true;
+    }
+    if (changed) _commit(byId.values.toList());
   }
 
   /// Remembers purged ids so the sync layer can still tell other devices

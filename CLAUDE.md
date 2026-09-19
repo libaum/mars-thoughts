@@ -60,8 +60,8 @@ Follows the shared Mars conventions (see ../DESIGN.md). Reference app: ../mars_f
 | `ThoughtsManager` (`logic/`) | Single source of truth (`thoughtsNotifier`, all stored thoughts, newest first). Derives `active` / `pinned` / `trash`. `delete` soft-deletes to trash; `restore` / `purge` / `emptyTrash` manage it. `togglePinMany`/`deleteMany` do the same in one batch commit for multi-select. Each persists immediately and stamps `changedAt`. `applySynced` writes remote edits *without* restamping. Purges are remembered for sync when `recordPurges` (defaults to the flavor flag). |
 | `ThemeManager` (`theme/`) | Light/dark, toggled from Settings. No preference yet defaults to dark (not system) — see `ThemeManager()`. |
 | `ShowcaseDataSource` (`data/`) | Curated example thoughts that seed the app for Play Store screenshots. Gated by `enabled` (`kDebugMode && !kSyncEnabled`), wired in `service_locator.dart` — every *store* debug build starts with this data, overwriting whatever was stored. Never in the personal flavor, or the fake thoughts would sync to the hub. |
-| `SyncService` (`sync/`) | Personal flavor only. Pairing state (hub URL + device token + encryption key), builds the `MarsSyncEngine`, and `syncNow()` (overlapping calls collapse into one). Status via `statusNotifier`. |
-| `ThoughtsSyncRepository` (`sync/`) | Personal flavor only. Maps thoughts onto `mars_sync`'s generic items: whole `Thought` as payload, ordered by `changedAt`; a *purge* becomes a tombstone, trashing is just an edit. |
+| `SyncService` (`sync/`) | Personal flavor only. Pairing state (hub URL — https only outside debug — + device token + encryption key), builds the `MarsSyncEngine`, runs the `KeyCheck` before the first push of a session, and `syncNow()` (overlapping calls collapse into one). Never throws, incl. `init()` on a broken keystore. Status via `statusNotifier`. |
+| `ThoughtsSyncRepository` (`sync/`) | Personal flavor only. Maps thoughts onto `mars_sync`'s generic items: whole `Thought` as payload, ordered by `changedAt`; a *purge* becomes a tombstone, trashing is just an edit. Two watermarks (push: `sync_last_synced_at`, pull: `sync_last_seen_seq`). Drops payloads whose `id` disagrees with the envelope. |
 | `SecureSyncKeyStore` (`sync/`) | Personal flavor only. Device token, encryption key and device id in Keystore-backed `flutter_secure_storage`, never SharedPreferences. |
 
 ### Sync (personal flavor only)
@@ -75,6 +75,15 @@ Built on the shared `../mars_sync` package (client) and `../mars_sync_hub`
   contains no sync strings at all. Never gate on a runtime value instead.
 - Local storage stays the source of truth; the hub is a relay. Bidirectional,
   last-write-wins by `changedAt`, deterministic tie-break by device id.
+  `applySynced` skips anything changed locally after the incoming stamp.
+- **Editor baseline** (`_editingBaseline` in `main_screen.dart`): the text a
+  thought had when loaded. Every write-back goes through `_writeBackIfChanged`
+  and is a no-op if the editor still equals the baseline — so an open but
+  untouched thought never overwrites an edit synced from another device.
+  Conversely `_followRemoteEditOfOpenThought` reloads the editor when the
+  open thought changes remotely and the user hasn't typed (or clears it if
+  the thought was purged elsewhere). Personal flavor only; the store flavor
+  registers no listener.
 - Payloads are AES-256-GCM encrypted on device before they leave; the hub only
   ever sees ciphertext. One key for all your devices, generated once, moved
   between devices by hand (Settings → Sync → Show/Paste) — never via the hub.
@@ -82,8 +91,9 @@ Built on the shared `../mars_sync` package (client) and `../mars_sync_hub`
 - Triggers: cold launch (post-frame), `resumed`, and `paused` (after the draft
   is filed, so it travels too), plus "Sync now" in Settings → Sync. All
   best-effort; errors land in `SyncStatus`, never in the UI flow.
-- Known limit: if a thought is purged on another device while it's loaded in
-  the editor here, leaving Write drops the edit (`update` finds no id).
+- Known limit: if a thought is purged on another device while the user is
+  *actively editing* it here, their unsaved text is dropped when they leave
+  Write (`update` finds no id). An untouched editor is cleared cleanly.
 
 ## Screens & Interactions
 

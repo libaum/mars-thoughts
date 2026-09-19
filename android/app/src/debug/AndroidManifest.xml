@@ -4,6 +4,11 @@
          to allow setting breakpoints, to provide hot reload, etc.
     -->
     <uses-permission android:name="android.permission.INTERNET"/>
-    <!-- The "… Debug" label comes from the appLabel placeholder set per
+    <!-- Debug only: lets the personal flavor talk plain http:// to a sync hub
+         running on the laptop for LAN testing. Release builds keep Android's
+         default (cleartext blocked) and the app itself refuses non-https URLs
+         outside debug (SyncService.pairDevice).
+         The "… Debug" label comes from the appLabel placeholder set per
          variant in build.gradle.kts, not from an override here. -->
+    <application android:usesCleartextTraffic="true" />
 </manifest>

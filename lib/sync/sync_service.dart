@@ -12,9 +12,26 @@ class SyncStatus {
   final DateTime? lastSyncedAt;
   final String? error;
 
-  const SyncStatus({required this.phase, this.lastSyncedAt, this.error});
+  /// Non-fatal: items on the hub this device couldn't read last round.
+  final int undecryptable;
+
+  const SyncStatus({
+    required this.phase,
+    this.lastSyncedAt,
+    this.error,
+    this.undecryptable = 0,
+  });
 
   bool get isPaired => phase != SyncPhase.unpaired;
+}
+
+/// Thrown by pairing/import when the input is unusable before anything is
+/// stored — the message is safe to show verbatim.
+class SyncSetupException implements Exception {
+  final String message;
+  SyncSetupException(this.message);
+  @override
+  String toString() => message;
 }
 
 /// Owns the personal flavor's sync lifecycle: pairing (server URL, device
@@ -23,7 +40,9 @@ class SyncStatus {
 /// calls collapse into the one already running.
 ///
 /// The three pairing steps are independent so a device can be paired in any
-/// order; sync only runs once all of them are in place.
+/// order; sync only runs once all of them are in place — and, before the
+/// first push of real data, only after the key has been verified against the
+/// hub's key-check item (see [KeyCheck]).
 class SyncService {
   final LocalStorageService _storage;
   final ThoughtsManager _manager;
@@ -34,6 +53,10 @@ class SyncService {
   );
 
   MarsSyncEngine? _engine;
+  SyncTransport? _client;
+  SyncEncryptor? _encryptor;
+  String? _deviceId;
+  bool _keyVerified = false;
   Future<void>? _inFlight;
 
   SyncService({
@@ -42,8 +65,16 @@ class SyncService {
   })  : _storage = storage,
         _manager = manager;
 
+  /// Never throws: a broken secure-storage (backup restore, keystore reset)
+  /// must not take the whole app down with it — thoughts live in plain
+  /// prefs and are unaffected.
   Future<void> init() async {
-    await _rebuildEngine();
+    try {
+      await _rebuildEngine();
+    } catch (e) {
+      _engine = null;
+      _publish(SyncPhase.error, error: 'Secure storage unavailable');
+    }
   }
 
   String? get serverUrl => _storage.getSyncServerUrl();
@@ -59,10 +90,22 @@ class SyncService {
   /// Stores the hub URL and device token, then asks the hub which device id
   /// the token belongs to — the user never retypes the name they registered
   /// on the server. Throws if the hub rejects the token or is unreachable.
+  ///
+  /// Plain `http://` is only accepted in debug builds (LAN testing against a
+  /// hub on the laptop); the release build talks TLS or not at all.
   Future<void> pairDevice({required String serverUrl, required String token}) async {
     final trimmedUrl = serverUrl.trim();
     final trimmedToken = token.trim();
-    final client = SyncClient(baseUrl: Uri.parse(trimmedUrl), deviceToken: trimmedToken);
+    final uri = Uri.tryParse(trimmedUrl);
+    if (uri == null || uri.host.isEmpty) {
+      throw SyncSetupException('Not a valid URL');
+    }
+    if (uri.scheme != 'https' && !(kDebugMode && uri.scheme == 'http')) {
+      throw SyncSetupException('Hub URL must use https://');
+    }
+    if (trimmedToken.isEmpty) throw SyncSetupException('Token is empty');
+
+    final client = SyncClient(baseUrl: uri, deviceToken: trimmedToken);
     final deviceId = await client.whoami();
 
     await _storage.setSyncServerUrl(trimmedUrl);
@@ -82,11 +125,32 @@ class SyncService {
     return exported;
   }
 
-  /// Every other device: takes the key generated elsewhere.
+  /// Every other device: takes the key generated elsewhere. Rejects
+  /// anything that isn't a 32-byte key outright; if the hub is already
+  /// paired, verifies against its key-check item before storing, so a
+  /// mistyped key can never push a single item.
   Future<void> importEncryptionKey(String encoded) async {
     final trimmed = encoded.trim();
-    // Fail early on garbage rather than at the first decrypt.
-    SyncEncryptor.importKey(trimmed);
+    final SyncEncryptor encryptor;
+    try {
+      encryptor = SyncEncryptor.importKey(trimmed);
+    } on FormatException catch (e) {
+      throw SyncSetupException('Not a valid key: ${e.message}');
+    }
+
+    final client = _client;
+    final deviceId = _deviceId;
+    if (client != null && deviceId != null) {
+      final outcome =
+          await KeyCheck(client: client, encryptor: encryptor, deviceId: deviceId).run();
+      if (outcome == KeyCheckOutcome.mismatch) {
+        throw SyncSetupException(
+          'This key does not match the one already used on the hub',
+        );
+      }
+      _keyVerified = true;
+    }
+
     await _keys.writeEncryptionKey(trimmed);
     await _rebuildEngine();
   }
@@ -94,12 +158,14 @@ class SyncService {
   Future<String?> exportEncryptionKey() => _keys.readEncryptionKey();
 
   /// Drops pairing and key. The hub keeps its (ciphertext) copy of every
-  /// thought; local thoughts stay as they are. The sync watermark resets so a
+  /// thought; local thoughts stay as they are. Both watermarks reset so a
   /// later re-pair does one full round again.
   Future<void> unpair() async {
     await _keys.clear();
     await _storage.setSyncServerUrl(null);
     await _storage.setSyncLastSyncedAt(null);
+    await _storage.setSyncLastSeenSeq(null);
+    _keyVerified = false;
     await _rebuildEngine();
   }
 
@@ -118,8 +184,20 @@ class SyncService {
     if (engine == null) return;
     _publish(SyncPhase.syncing);
     try {
-      await engine.syncNow();
-      _publish(SyncPhase.idle);
+      if (!_keyVerified) {
+        final outcome = await KeyCheck(
+          client: _client!,
+          encryptor: _encryptor!,
+          deviceId: _deviceId!,
+        ).run();
+        if (outcome == KeyCheckOutcome.mismatch) {
+          _publish(SyncPhase.error, error: 'Encryption key does not match the hub');
+          return;
+        }
+        _keyVerified = true;
+      }
+      final result = await engine.syncNow();
+      _publish(SyncPhase.idle, undecryptable: result.undecryptable);
     } catch (e) {
       _publish(SyncPhase.error, error: _describe(e));
     }
@@ -131,7 +209,13 @@ class SyncService {
     final key = await _keys.readEncryptionKey();
     final deviceId = await _keys.readDeviceId();
 
-    if (url == null || token == null || key == null || deviceId == null) {
+    _client = (url != null && token != null)
+        ? SyncClient(baseUrl: Uri.parse(url), deviceToken: token)
+        : null;
+    _deviceId = deviceId;
+    _encryptor = key != null ? SyncEncryptor.importKey(key) : null;
+
+    if (_client == null || _encryptor == null || deviceId == null) {
       _engine = null;
       _publish(SyncPhase.unpaired);
       return;
@@ -143,17 +227,19 @@ class SyncService {
         storage: _storage,
         deviceId: deviceId,
       ),
-      client: SyncClient(baseUrl: Uri.parse(url), deviceToken: token),
-      encryptor: SyncEncryptor.importKey(key),
+      client: _client!,
+      encryptor: _encryptor!,
+      deviceId: deviceId,
     );
     _publish(SyncPhase.idle);
   }
 
-  void _publish(SyncPhase phase, {String? error}) {
+  void _publish(SyncPhase phase, {String? error, int undecryptable = 0}) {
     statusNotifier.value = SyncStatus(
       phase: phase,
       lastSyncedAt: _storage.getSyncLastSyncedAt(),
       error: error,
+      undecryptable: undecryptable,
     );
   }
 
@@ -166,7 +252,6 @@ class SyncService {
         final code => 'Hub error $code',
       };
     }
-    if (e is SyncDecryptException) return 'Encryption key mismatch';
     return 'Sync failed';
   }
 }

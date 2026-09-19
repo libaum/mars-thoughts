@@ -62,6 +62,7 @@ class _SyncScreenState extends State<SyncScreen> {
       title: 'Hub',
       fields: const ['Server URL', 'Device token'],
       initial: [_sync.serverUrl ?? 'https://', ''],
+      obscure: const [false, true],
     );
     if (result == null) return;
     await _guard(() async {
@@ -88,6 +89,7 @@ class _SyncScreenState extends State<SyncScreen> {
       title: 'Encryption key',
       fields: const ['Key from your first device'],
       initial: const [''],
+      obscure: const [true],
     );
     if (result == null) return;
     await _guard(() async {
@@ -213,10 +215,13 @@ class _SyncScreenState extends State<SyncScreen> {
     final last = status.lastSyncedAt == null
         ? 'never synced'
         : 'last sync ${formatThoughtTime(status.lastSyncedAt!)}';
+    final skipped = status.undecryptable == 0
+        ? ''
+        : '\n${status.undecryptable} item(s) on the hub could not be decrypted';
     return switch (status.phase) {
       SyncPhase.unpaired => 'Finish pairing above',
       SyncPhase.syncing => 'Syncing…',
-      SyncPhase.idle => last,
+      SyncPhase.idle => '$last$skipped',
       SyncPhase.error => '${status.error}\n$last',
     };
   }
@@ -249,6 +254,7 @@ class _SyncScreenState extends State<SyncScreen> {
     required String title,
     required List<String> fields,
     required List<String> initial,
+    required List<bool> obscure,
   }) async {
     final controllers = [
       for (var i = 0; i < fields.length; i++)
@@ -266,6 +272,7 @@ class _SyncScreenState extends State<SyncScreen> {
                 controller: controllers[i],
                 autocorrect: false,
                 enableSuggestions: false,
+                obscureText: obscure[i],
                 style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w300),
                 decoration: InputDecoration(
                   labelText: fields[i],
