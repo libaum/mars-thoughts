@@ -12,6 +12,7 @@ class LocalStorageService {
   static const _keySyncServerUrl = 'sync_server_url';
   static const _keySyncLastSyncedAt = 'sync_last_synced_at';
   static const _keySyncLastSeenSeq = 'sync_last_seen_seq';
+  static const _keySyncLastSeenHubId = 'sync_last_seen_hub_id';
   static const _keyThemeIsDark = 'theme_is_dark';
   static const _keySettingsHintSeen = 'settings_hint_seen';
   static const _keyDraftText = 'draft_text';
@@ -183,15 +184,20 @@ class LocalStorageService {
     }
   }
 
-  /// Hub sequence number up to which this device has pulled. Independent of
-  /// [getSyncLastSyncedAt], which is the *push* watermark on the local clock.
-  int getSyncLastSeenSeq() => _prefs.getInt(_keySyncLastSeenSeq) ?? 0;
+  /// Hub sequence number up to which this device has pulled, and which hub
+  /// instance that number belongs to. Independent of [getSyncLastSyncedAt],
+  /// which is the *push* watermark on the local clock.
+  int? getSyncLastSeenSeq() => _prefs.getInt(_keySyncLastSeenSeq);
 
-  Future<void> setSyncLastSeenSeq(int? seq) async {
-    if (seq == null) {
+  String? getSyncLastSeenHubId() => _prefs.getString(_keySyncLastSeenHubId);
+
+  Future<void> setSyncPullWatermark({required int? seq, required String? hubId}) async {
+    if (seq == null || hubId == null) {
       await _prefs.remove(_keySyncLastSeenSeq);
+      await _prefs.remove(_keySyncLastSeenHubId);
     } else {
       await _prefs.setInt(_keySyncLastSeenSeq, seq);
+      await _prefs.setString(_keySyncLastSeenHubId, hubId);
     }
   }
 }

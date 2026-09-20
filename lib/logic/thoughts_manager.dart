@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 import 'package:mars_thoughts/data/local_storage_service.dart';
 import 'package:mars_thoughts/domain/thought.dart';
@@ -166,7 +168,15 @@ class ThoughtsManager {
     var changed = false;
     for (final t in upserts) {
       final existing = byId[t.id];
-      if (existing != null && existing.changedAt.isAfter(t.changedAt)) continue;
+      if (existing != null) {
+        if (existing.changedAt.isAfter(t.changedAt)) continue;
+        // Our own push coming back from the hub: same stamp, same content.
+        // Rewriting it would only churn storage and the UI.
+        if (existing.changedAt.isAtSameMomentAs(t.changedAt) &&
+            jsonEncode(existing.toJson()) == jsonEncode(t.toJson())) {
+          continue;
+        }
+      }
       byId[t.id] = t;
       changed = true;
     }

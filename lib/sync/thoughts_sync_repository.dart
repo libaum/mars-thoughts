@@ -93,8 +93,14 @@ class ThoughtsSyncRepository implements SyncRepository {
   }
 
   @override
-  Future<int> lastSeenSeq() async => _storage.getSyncLastSeenSeq();
+  Future<PullWatermark?> pullWatermark() async {
+    final seq = _storage.getSyncLastSeenSeq();
+    final hubId = _storage.getSyncLastSeenHubId();
+    if (seq == null || hubId == null) return null;
+    return PullWatermark(hubId: hubId, seq: seq);
+  }
 
   @override
-  Future<void> setLastSeenSeq(int seq) => _storage.setSyncLastSeenSeq(seq);
+  Future<void> setPullWatermark(PullWatermark watermark) =>
+      _storage.setSyncPullWatermark(seq: watermark.seq, hubId: watermark.hubId);
 }

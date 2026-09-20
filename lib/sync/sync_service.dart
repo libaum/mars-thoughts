@@ -111,6 +111,11 @@ class SyncService {
     await _storage.setSyncServerUrl(trimmedUrl);
     await _keys.writeDeviceToken(trimmedToken);
     await _keys.writeDeviceId(deviceId);
+    // A (re-)pair may point at a different hub: forget where pulls left off
+    // (the engine also detects a changed hub_id by itself) and re-verify the
+    // key against whatever hub this is.
+    await _storage.setSyncPullWatermark(seq: null, hubId: null);
+    _keyVerified = false;
     await _rebuildEngine();
   }
 
@@ -121,6 +126,7 @@ class SyncService {
     final encryptor = await SyncEncryptor.generate();
     final exported = await encryptor.exportKey();
     await _keys.writeEncryptionKey(exported);
+    _keyVerified = false;
     await _rebuildEngine();
     return exported;
   }
@@ -164,7 +170,7 @@ class SyncService {
     await _keys.clear();
     await _storage.setSyncServerUrl(null);
     await _storage.setSyncLastSyncedAt(null);
-    await _storage.setSyncLastSeenSeq(null);
+    await _storage.setSyncPullWatermark(seq: null, hubId: null);
     _keyVerified = false;
     await _rebuildEngine();
   }
@@ -229,7 +235,6 @@ class SyncService {
       ),
       client: _client!,
       encryptor: _encryptor!,
-      deviceId: deviceId,
     );
     _publish(SyncPhase.idle);
   }
@@ -249,7 +254,9 @@ class SyncService {
         401 => 'Hub rejected this device token',
         429 => 'Hub is rate-limiting this device',
         null => 'Hub unreachable',
-        final code => 'Hub error $code',
+        // The hub's own explanation ("updated_at is in the future — this
+        // device's clock is ahead of the hub") beats a bare status code.
+        final code => e.detail == null ? 'Hub error $code' : 'Hub error $code: ${e.detail}',
       };
     }
     return 'Sync failed';

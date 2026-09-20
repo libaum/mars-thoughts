@@ -230,11 +230,26 @@ void main() {
       expect(manager.thoughtsNotifier.value, isEmpty);
     });
 
-    test('pull watermark (seq) is stored separately from the push watermark', () async {
-      expect(await repo.lastSeenSeq(), 0);
-      await repo.setLastSeenSeq(42);
-      expect(await repo.lastSeenSeq(), 42);
+    test('pull watermark (hub id + seq) is stored separately from the push watermark', () async {
+      expect(await repo.pullWatermark(), isNull);
+      await repo.setPullWatermark(const PullWatermark(hubId: 'hub-A', seq: 42));
+      final stored = await repo.pullWatermark();
+      expect(stored!.hubId, 'hub-A');
+      expect(stored.seq, 42);
       expect(await repo.lastSyncedAt(), isNull);
+    });
+
+    test('applySynced treats an identical echo as a no-op', () {
+      final local = manager.create('hello')!;
+      var notifications = 0;
+      manager.thoughtsNotifier.addListener(() => notifications++);
+
+      manager.applySynced([Thought.fromJson(local.toJson())], {});
+      expect(notifications, 0);
+
+      manager.applySynced([local.copyWith(text: 'changed')], {});
+      expect(notifications, 1);
+      expect(manager.thoughtsNotifier.value.single.text, 'changed');
     });
 
     test('setLastSyncedAt stores the watermark and prunes pushed purges', () async {
