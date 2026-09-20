@@ -1,20 +1,16 @@
-import 'package:flutter/foundation.dart';
 import 'package:mars_thoughts/domain/thought.dart';
-import 'package:mars_thoughts/sync/sync_flags.dart';
 
 /// Curated example thoughts used to fill the app for Play Store screenshots.
 ///
-/// Hard-gated by [enabled]: only active in `kDebugMode`, and only ever
-/// written once per install (see `LocalStorageService.getShowcaseSeeded`) —
-/// not on every relaunch, or manual edits made while testing would get wiped
-/// out each time the app restarts. This can never load in a profile or
-/// release build. The personal flavor is excluded even in debug: a seeded
-/// device would push these fake thoughts to the sync hub and onto every
-/// other paired device.
+/// Gated in `service_locator.dart`: only in `kDebugMode`, never in the
+/// personal flavor (a seeded device would push these fake thoughts to the
+/// sync hub and onto every other paired device), and only ever written once
+/// per install (see `LocalStorageService.getShowcaseSeeded`) — not on every
+/// relaunch, or manual edits made while testing would get wiped out each
+/// time the app restarts. The gate lives in the locator, not here: `data/`
+/// is shared with the desktop hub and must not read the Android flavor.
 class ShowcaseDataSource {
   const ShowcaseDataSource._();
-
-  static bool get enabled => kDebugMode && !kSyncEnabled;
 
   /// Sorted newest-first is not required — `ThoughtsManager` re-sorts by
   /// `updatedAt` on load — but the ids/timestamps below are chosen so the

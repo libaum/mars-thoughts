@@ -4,7 +4,6 @@ import 'package:flutter/foundation.dart';
 import 'package:mars_thoughts/data/local_storage_service.dart';
 import 'package:mars_thoughts/domain/thought.dart';
 import 'package:mars_thoughts/services/service_locator.dart';
-import 'package:mars_thoughts/sync/sync_flags.dart';
 
 /// Core state for the app: the list of captured thoughts.
 ///
@@ -20,14 +19,15 @@ import 'package:mars_thoughts/sync/sync_flags.dart';
 class ThoughtsManager {
   final _storage = getIt<LocalStorageService>();
 
-  /// Whether purges leave a trace for the sync layer. Defaults to the build
-  /// flavor; tests pass `true` explicitly since they run without a flavor.
+  /// Whether purges leave a trace for the sync layer. The caller decides
+  /// (the phone: its build flavor; the desktop hub: always) — this layer is
+  /// shared with the desktop and must not read the Android flavor itself.
   final bool _recordPurges;
 
   /// Every stored thought (live + trashed), sorted newest-updated first.
   late final ValueNotifier<List<Thought>> thoughtsNotifier;
 
-  ThoughtsManager({bool recordPurges = kSyncEnabled})
+  ThoughtsManager({required bool recordPurges})
       : _recordPurges = recordPurges {
     final thoughts = _storage.getThoughts();
     _sortByUpdated(thoughts);

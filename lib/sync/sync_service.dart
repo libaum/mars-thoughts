@@ -75,6 +75,11 @@ class SyncService {
   Future<void> init() async {
     try {
       await _rebuildEngine();
+    } on FormatException {
+      // The store answered, but what's in it can't be used (garbled key or
+      // hub URL). Different remedy than a dead keystore: re-pair.
+      _engine = null;
+      _publish(SyncPhase.error, error: 'Stored pairing is invalid — unpair and pair again');
     } catch (e) {
       _engine = null;
       _publish(SyncPhase.error, error: 'Secure storage unavailable');
