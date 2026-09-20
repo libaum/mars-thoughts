@@ -46,7 +46,7 @@ class SyncSetupException implements Exception {
 class SyncService {
   final LocalStorageService _storage;
   final ThoughtsManager _manager;
-  final SecureSyncKeyStore _keys = SecureSyncKeyStore();
+  final SyncKeyStore _keys;
 
   final statusNotifier = ValueNotifier<SyncStatus>(
     const SyncStatus(phase: SyncPhase.unpaired),
@@ -59,11 +59,15 @@ class SyncService {
   bool _keyVerified = false;
   Future<void>? _inFlight;
 
+  /// [keys] defaults to the Android Keystore-backed store; the desktop hub
+  /// passes a file-backed one.
   SyncService({
     required LocalStorageService storage,
     required ThoughtsManager manager,
+    SyncKeyStore? keys,
   })  : _storage = storage,
-        _manager = manager;
+        _manager = manager,
+        _keys = keys ?? SecureSyncKeyStore();
 
   /// Never throws: a broken secure-storage (backup restore, keystore reset)
   /// must not take the whole app down with it — thoughts live in plain

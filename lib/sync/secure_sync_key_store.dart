@@ -36,6 +36,7 @@ class SecureSyncKeyStore implements SyncKeyStore {
   Future<void> writeDeviceId(String deviceId) =>
       _storage.write(key: _keyDeviceId, value: deviceId);
 
+  @override
   Future<void> clear() async {
     await _storage.delete(key: _keyDeviceToken);
     await _storage.delete(key: _keyEncryptionKey);
