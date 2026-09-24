@@ -57,6 +57,16 @@ class SyncService {
   SyncEncryptor? _encryptor;
   String? _deviceId;
   bool _keyVerified = false;
+
+  /// Bumped on every change to the pairing (pair, key, unpair). A key check
+  /// still running when it moves on answers a question about a hub or key
+  /// this service no longer uses — its result must not count.
+  int _generation = 0;
+
+  void _pairingChanged() {
+    _keyVerified = false;
+    _generation++;
+  }
   Future<void>? _inFlight;
 
   /// [keys] defaults to the Android Keystore-backed store; the desktop hub
@@ -124,7 +134,7 @@ class SyncService {
     // (the engine also detects a changed hub_id by itself) and re-verify the
     // key against whatever hub this is.
     await _storage.setSyncPullWatermark(seq: null, hubId: null);
-    _keyVerified = false;
+    _pairingChanged();
     await _rebuildEngine();
   }
 
@@ -135,7 +145,7 @@ class SyncService {
     final encryptor = await SyncEncryptor.generate();
     final exported = await encryptor.exportKey();
     await _keys.writeEncryptionKey(exported);
-    _keyVerified = false;
+    _pairingChanged();
     await _rebuildEngine();
     return exported;
   }
@@ -155,6 +165,8 @@ class SyncService {
 
     final client = _client;
     final deviceId = _deviceId;
+    final generation = _generation;
+    var verified = false;
     if (client != null && deviceId != null) {
       final outcome =
           await KeyCheck(client: client, encryptor: encryptor, deviceId: deviceId).run();
@@ -163,11 +175,16 @@ class SyncService {
           'This key does not match the one already used on the hub',
         );
       }
-      _keyVerified = true;
+      // Only if nothing re-paired while the check ran.
+      verified = generation == _generation;
     }
 
     await _keys.writeEncryptionKey(trimmed);
+    _pairingChanged();
     await _rebuildEngine();
+    // Set after the rebuild, which is itself a pairing change: the check
+    // above was for exactly this key against exactly this hub.
+    if (verified) _keyVerified = true;
   }
 
   Future<String?> exportEncryptionKey() => _keys.readEncryptionKey();
@@ -180,7 +197,7 @@ class SyncService {
     await _storage.setSyncServerUrl(null);
     await _storage.setSyncLastSyncedAt(null);
     await _storage.setSyncPullWatermark(seq: null, hubId: null);
-    _keyVerified = false;
+    _pairingChanged();
     await _rebuildEngine();
   }
 
@@ -197,6 +214,7 @@ class SyncService {
   Future<void> _run() async {
     final engine = _engine;
     if (engine == null) return;
+    final generation = _generation;
     _publish(SyncPhase.syncing);
     try {
       if (!_keyVerified) {
@@ -205,6 +223,10 @@ class SyncService {
           encryptor: _encryptor!,
           deviceId: _deviceId!,
         ).run();
+        // Re-paired while the check ran: its answer is about the old pairing.
+        // The rebuild already published the new state; the next round checks
+        // the new pairing from scratch.
+        if (generation != _generation) return;
         if (outcome == KeyCheckOutcome.mismatch) {
           _publish(SyncPhase.error, error: 'Encryption key does not match the hub');
           return;
