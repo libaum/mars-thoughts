@@ -75,9 +75,14 @@ class SyncService {
     required LocalStorageService storage,
     required ThoughtsManager manager,
     SyncKeyStore? keys,
+    @visibleForTesting SyncTransport Function(Uri baseUrl, String token)? transport,
   })  : _storage = storage,
         _manager = manager,
-        _keys = keys ?? SecureSyncKeyStore();
+        _keys = keys ?? SecureSyncKeyStore(),
+        _transport = transport ??
+            ((baseUrl, token) => SyncClient(baseUrl: baseUrl, deviceToken: token));
+
+  final SyncTransport Function(Uri baseUrl, String token) _transport;
 
   /// Never throws: a broken secure-storage (backup restore, keystore reset)
   /// must not take the whole app down with it — thoughts live in plain
@@ -124,7 +129,7 @@ class SyncService {
     }
     if (trimmedToken.isEmpty) throw SyncSetupException('Token is empty');
 
-    final client = SyncClient(baseUrl: uri, deviceToken: trimmedToken);
+    final client = _transport(uri, trimmedToken);
     final deviceId = await client.whoami();
 
     await _storage.setSyncServerUrl(trimmedUrl);
@@ -180,11 +185,15 @@ class SyncService {
     }
 
     await _keys.writeEncryptionKey(trimmed);
+    // A re-pair may also land while the key is written or the engine is
+    // rebuilt; the check then was against a hub this service no longer uses.
+    verified = verified && generation == _generation;
     _pairingChanged();
+    final mine = _generation;
     await _rebuildEngine();
     // Set after the rebuild, which is itself a pairing change: the check
     // above was for exactly this key against exactly this hub.
-    if (verified) _keyVerified = true;
+    if (verified && mine == _generation) _keyVerified = true;
   }
 
   Future<String?> exportEncryptionKey() => _keys.readEncryptionKey();
@@ -247,7 +256,7 @@ class SyncService {
     final deviceId = await _keys.readDeviceId();
 
     _client = (url != null && token != null)
-        ? SyncClient(baseUrl: Uri.parse(url), deviceToken: token)
+        ? _transport(Uri.parse(url), token)
         : null;
     _deviceId = deviceId;
     _encryptor = key != null ? SyncEncryptor.importKey(key) : null;
