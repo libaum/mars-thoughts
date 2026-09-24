@@ -62,12 +62,19 @@ class _Transport implements SyncTransport {
 class _Keys implements SyncKeyStore {
   final _values = <String, String>{};
   Completer<void>? keyWriteGate;
+  /// Holds the next token read only.
+  Completer<void>? tokenGate;
   @override
   Future<void> clear() async => _values.clear();
   @override
   Future<String?> readDeviceId() async => _values['id'];
   @override
-  Future<String?> readDeviceToken() async => _values['token'];
+  Future<String?> readDeviceToken() async {
+    final g = tokenGate;
+    tokenGate = null;
+    await g?.future;
+    return _values['token'];
+  }
   @override
   Future<String?> readEncryptionKey() async => _values['key'];
   @override
@@ -159,6 +166,35 @@ void main() {
     await repair;
 
     await sync.syncNow();
+    expect(hubB.holdsThoughts(), isFalse, reason: 'pushed with a key hub B never saw');
+  });
+
+  test('a re-pair during the key import\'s engine rebuild wins, unverified',
+      () async {
+    final keys = _Keys();
+    final sync = SyncService(
+      storage: storage,
+      manager: manager,
+      keys: keys,
+      transport: (uri, token) => _Transport(uri.host == 'a' ? hubA : hubB, 'phone'),
+    );
+    await storage.setSyncServerUrl('https://a');
+    await keys.writeDeviceToken('t');
+    await keys.writeDeviceId('phone');
+    await sync.init();
+    manager.create('geheim');
+
+    keys.tokenGate = Completer<void>();
+    final gate = keys.tokenGate!;
+    final import = sync.importEncryptionKey(keyA); // rebuild stalls on the token
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    await sync.pairDevice(serverUrl: 'https://b', token: 't');
+    gate.complete();
+    await import;
+
+    await sync.syncNow();
+    expect(sync.statusNotifier.value.phase, SyncPhase.error,
+        reason: 'the stale rebuild pointed the engine back at hub A');
     expect(hubB.holdsThoughts(), isFalse, reason: 'pushed with a key hub B never saw');
   });
 }
