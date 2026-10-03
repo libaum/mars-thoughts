@@ -7,6 +7,7 @@ import 'package:mars_thoughts/data/local_storage_service.dart';
 import 'package:mars_thoughts/domain/thought.dart';
 import 'package:mars_thoughts/logic/thoughts_manager.dart';
 import 'package:mars_thoughts/pages/settings_screen.dart';
+import 'package:mars_thoughts/pages/widgets/panel_indicator.dart';
 import 'package:mars_thoughts/pages/widgets/thought_row.dart';
 import 'package:mars_thoughts/services/service_locator.dart';
 import 'package:mars_thoughts/sync/sync_flags.dart';
@@ -105,6 +106,15 @@ class _MainScreenState extends State<MainScreen>
   /// downward pull continues into Settings.
   bool _settingsHintVisible = false;
 
+  /// The edge indicator ([PanelIndicator]) — shown only while navigating and
+  /// briefly after landing, so you always know where you are without it
+  /// sitting on the blank Write page at rest. [_indicatorDragging] holds it
+  /// up for as long as a reveal drag is underway.
+  final _indicatorPosition = ValueNotifier<double>(_slotWrite);
+  final _indicatorVisible = ValueNotifier<bool>(false);
+  Timer? _indicatorHideTimer;
+  bool _indicatorDragging = false;
+
   @override
   void initState() {
     super.initState();
@@ -114,7 +124,7 @@ class _MainScreenState extends State<MainScreen>
       lowerBound: _slotSettings,
       upperBound: _slotAll,
       value: _slotWrite,
-    );
+    )..addListener(_onNavChanged);
     _editingId = _storage.getDraftEditingId();
     _editingBaseline = _storedTextFor(_editingId);
     final draft = _storage.getDraftText();
@@ -191,6 +201,9 @@ class _MainScreenState extends State<MainScreen>
       _manager.thoughtsNotifier.removeListener(_followRemoteEditOfOpenThought);
     }
     _draftSaveTimer?.cancel();
+    _indicatorHideTimer?.cancel();
+    _indicatorPosition.dispose();
+    _indicatorVisible.dispose();
     _navController.dispose();
     _editorController.dispose();
     _editorScroll.dispose();
@@ -378,6 +391,22 @@ class _MainScreenState extends State<MainScreen>
 
   // ── Vertical reveal navigation ─────────────────────────────────────────
 
+  /// Every move of the filmstrip — a followed drag, a landing, back, opening
+  /// a thought — brings the indicator up and points it at the new position.
+  void _onNavChanged() {
+    _indicatorPosition.value = _navController.value;
+    _showIndicator();
+  }
+
+  void _showIndicator() {
+    _indicatorVisible.value = true;
+    _indicatorHideTimer?.cancel();
+    if (_indicatorDragging) return;
+    _indicatorHideTimer = Timer(const Duration(milliseconds: 1200), () {
+      _indicatorVisible.value = false;
+    });
+  }
+
   /// Whether a drag on the write editor should reveal a panel rather than
   /// scroll the draft. The editor keeps the axis for as long as it has text
   /// left to show in that direction; once it is pinned against that end, the
@@ -480,6 +509,10 @@ class _MainScreenState extends State<MainScreen>
     // reveal — until the gesture resolves in the matching *DragEnd, which
     // then cuts straight to the result instead of easing into it.
     if (_animateDrag) _navController.value = _dragProgress;
+    // Shown from the first real pull on, not on drag start — a plain list
+    // scroll also starts a "drag" here and shouldn't flash it.
+    _indicatorDragging = true;
+    _showIndicator();
   }
 
   void _onSettingsDragUpdate(DragUpdateDetails d) {
@@ -503,6 +536,10 @@ class _MainScreenState extends State<MainScreen>
     double? above,
     double? below,
   }) {
+    if (_indicatorDragging) {
+      _indicatorDragging = false;
+      _showIndicator();
+    }
     final velocity = d.primaryVelocity ?? 0;
     double target;
     if (velocity.abs() > _flingVelocity) {
@@ -669,6 +706,22 @@ class _MainScreenState extends State<MainScreen>
                   _positioned(_slotPinned, height, _buildPinnedPanel()),
                   _positioned(_slotWrite, height, _buildWritePanel()),
                   _positioned(_slotAll, height, _buildAllPanel()),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: Padding(
+                      padding: const EdgeInsets.only(right: 6),
+                      child: PanelIndicator(
+                        position: _indicatorPosition,
+                        visible: _indicatorVisible,
+                        slots: const [
+                          _slotSettings,
+                          _slotPinned,
+                          _slotWrite,
+                          _slotAll,
+                        ],
+                      ),
+                    ),
+                  ),
                   _buildSelectionBar(),
                 ],
               );

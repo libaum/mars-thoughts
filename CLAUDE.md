@@ -218,7 +218,13 @@ bottom, opening on Write:
   active selection first, then steps one level back through the stack —
   Settings to Pinned, Pinned/All to Write (`_stepBack`) — before falling
   through to leaving the app.
-- No page-indicator dots — the panels are their own orientation.
+- **Panel indicator** (`pages/widgets/panel_indicator.dart`): four short
+  vertical strokes on the right edge, vertically centred, Settings→All
+  top to bottom, the current one in the foreground colour, the rest gray. It
+  behaves like a scrollbar, not page dots: it fades in on any filmstrip move
+  (`_onNavChanged`) or real reveal pull (`_onDragUpdate` — *not* drag start,
+  so plain list scrolling doesn't flash it), follows the position
+  continuously, and fades out ~1.2 s after landing. At rest it's gone — Write stays a blank page.
 - The panels paint **edge to edge** (`SafeArea(bottom: false)`); the lists and
   the settings strip carry the navigation-bar inset themselves. Otherwise the
   panel underneath shows through the translucent system nav bar mid-reveal.
