@@ -4,7 +4,7 @@
          to allow setting breakpoints, to provide hot reload, etc.
     -->
     <uses-permission android:name="android.permission.INTERNET"/>
-    <!-- Debug only: lets the personal flavor talk plain http:// to a sync hub
+    <!-- Debug only: lets the personal flavor talk plain http:// to a relay
          running on the laptop for LAN testing. Release builds keep Android's
          default (cleartext blocked) and the app itself refuses non-https URLs
          outside debug (SyncService.pairDevice).

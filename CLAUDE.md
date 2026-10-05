@@ -56,18 +56,18 @@ Follows the shared Mars conventions (see ../DESIGN.md). Reference app: ../mars_f
 | Class | Responsibility |
 |---|---|
 | `Thought` (`domain/`) | Immutable model: id, text, createdAt, updatedAt, changedAt, pinnedAt, deletedAt. `preview` = first non-empty line. `isDeleted` = in trash. `updatedAt` = last *text* edit (drives list order); `changedAt` = last change of *any* kind (pin, trash, restore too) — the sync clock. Legacy JSON without `changedAt` falls back to `updatedAt`. |
-| `LocalStorageService` (`data/`) | SharedPreferences wrapper — JSON list of thoughts, theme flag, draft, and one-time hint/tutorial flags, plus the `Animations` toggle (`getAnimationsEnabled`/`setAnimationsEnabled`). The `sync_*` keys at the bottom (purged ids, hub URL, last-sync watermark) are only read by the personal flavor. |
-| `ThoughtsManager` (`logic/`) | Single source of truth (`thoughtsNotifier`, all stored thoughts, newest first). Derives `active` / `pinned` / `trash`. `delete` soft-deletes to trash; `restore` / `purge` / `emptyTrash` manage it. `togglePinMany`/`deleteMany` do the same in one batch commit for multi-select. Each persists immediately and stamps `changedAt`. `applySynced` writes remote edits *without* restamping. Purges are remembered for sync when `recordPurges` (required; the locator passes the flavor flag, the desktop hub `true`). |
+| `LocalStorageService` (`data/`) | SharedPreferences wrapper — JSON list of thoughts, theme flag, draft, and one-time hint/tutorial flags, plus the `Animations` toggle (`getAnimationsEnabled`/`setAnimationsEnabled`). The `sync_*` keys at the bottom (purged ids, relay URL, last-sync watermark) are only read by the personal flavor. |
+| `ThoughtsManager` (`logic/`) | Single source of truth (`thoughtsNotifier`, all stored thoughts, newest first). Derives `active` / `pinned` / `trash`. `delete` soft-deletes to trash; `restore` / `purge` / `emptyTrash` manage it. `togglePinMany`/`deleteMany` do the same in one batch commit for multi-select. Each persists immediately and stamps `changedAt`. `applySynced` writes remote edits *without* restamping. Purges are remembered for sync when `recordPurges` (required; the locator passes the flavor flag, Mars Hub `true`). |
 | `ThemeManager` (`theme/`) | Light/dark, toggled from Settings. No preference yet defaults to dark (not system) — see `ThemeManager()`. |
-| `ShowcaseDataSource` (`data/`) | Curated example thoughts that seed the app for Play Store screenshots. Gated in `service_locator.dart` (`kDebugMode && !kSyncEnabled`) — every *store* debug build starts with this data, overwriting whatever was stored. Never in the personal flavor, or the fake thoughts would sync to the hub. |
-| `SyncService` (`sync/`) | Personal flavor only. Pairing state (hub URL — https only outside debug — + device token + encryption key), builds the `MarsSyncEngine`, runs the `KeyCheck` before the first push of a session, and `syncNow()` (overlapping calls collapse into one). Never throws, incl. `init()` on a broken keystore. Status via `statusNotifier`. Takes an optional `SyncKeyStore` — `../mars_hub` (Linux desktop) reuses this class, `ThoughtsManager` and `SyncScreen` unchanged with a file-backed store, so changes here must keep working without Android. |
+| `ShowcaseDataSource` (`data/`) | Curated example thoughts that seed the app for Play Store screenshots. Gated in `service_locator.dart` (`kDebugMode && !kSyncEnabled`) — every *store* debug build starts with this data, overwriting whatever was stored. Never in the personal flavor, or the fake thoughts would sync to the relay. |
+| `SyncService` (`sync/`) | Personal flavor only. Pairing state (relay URL — https only outside debug — + device token + encryption key), builds the `MarsSyncEngine`, runs the `KeyCheck` before the first push of a session, and `syncNow()` (overlapping calls collapse into one). Never throws, incl. `init()` on a broken keystore. Status via `statusNotifier`. Takes an optional `SyncKeyStore` — `../mars_hub` (Linux desktop) reuses this class, `ThoughtsManager` and `SyncScreen` unchanged with a file-backed store, so changes here must keep working without Android. |
 | `ThoughtsSyncRepository` (`sync/`) | Personal flavor only. Maps thoughts onto `mars_sync`'s generic items: whole `Thought` as payload, ordered by `changedAt`; a *purge* becomes a tombstone, trashing is just an edit. Two watermarks (push: `sync_last_synced_at`, pull: `sync_last_seen_seq`). Drops payloads whose `id` disagrees with the envelope. |
 | `SecureSyncKeyStore` (`sync/`) | Personal flavor only. Device token, encryption key and device id in Keystore-backed `flutter_secure_storage`, never SharedPreferences. |
 
 ### Sync (personal flavor only)
 
-Built on the shared `../mars_sync` package (client) and `../mars_sync_hub`
-(server) — read `../mars_sync_hub/SECURITY.md` before touching anything here.
+Built on the shared `../mars_sync` package (client) and `../mars_sync_relay`
+(server) — read `../mars_sync_relay/SECURITY.md` before touching anything here.
 
 - Gate: `kSyncEnabled` in `lib/sync/sync_flags.dart` is `appFlavor == 'personal'`,
   a compile-time constant. In the store flavor every `if (kSyncEnabled)` branch
@@ -77,7 +77,7 @@ Built on the shared `../mars_sync` package (client) and `../mars_sync_hub`
   `data/`, `sync/`, `util/` are imported by `../mars_hub` (Linux, no flavor →
   the constant is `false` there) and must not gate on it or use Android-only
   plugins — `test/desktop_boundary_test.dart` enforces this.
-- Local storage stays the source of truth; the hub is a relay. Bidirectional,
+- Local storage stays the source of truth; the relay only passes ciphertext along. Bidirectional,
   last-write-wins by `changedAt`, deterministic tie-break by device id.
   `applySynced` skips anything changed locally after the incoming stamp.
 - **Editor baseline** (`_editingBaseline` in `main_screen.dart`): the text a
@@ -88,10 +88,10 @@ Built on the shared `../mars_sync` package (client) and `../mars_sync_hub`
   open thought changes remotely and the user hasn't typed (or clears it if
   the thought was purged elsewhere). Personal flavor only; the store flavor
   registers no listener.
-- Payloads are AES-256-GCM encrypted on device before they leave; the hub only
+- Payloads are AES-256-GCM encrypted on device before they leave; the relay only
   ever sees ciphertext. One key for all your devices, generated once, moved
-  between devices by hand (Settings → Sync → Show/Paste) — never via the hub.
-  **Losing the key makes everything on the hub unreadable; back it up.**
+  between devices by hand (Settings → Sync → Show/Paste) — never via the relay.
+  **Losing the key makes everything on the relay unreadable; back it up.**
 - Triggers: cold launch (post-frame), `resumed`, and `paused` (after the draft
   is filed, so it travels too), plus "Sync now" in Settings → Sync. All
   best-effort; errors land in `SyncStatus`, never in the UI flow.

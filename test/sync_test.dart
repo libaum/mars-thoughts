@@ -230,11 +230,11 @@ void main() {
       expect(manager.thoughtsNotifier.value, isEmpty);
     });
 
-    test('pull watermark (hub id + seq) is stored separately from the push watermark', () async {
+    test('pull watermark (relay id + seq) is stored separately from the push watermark', () async {
       expect(await repo.pullWatermark(), isNull);
-      await repo.setPullWatermark(const PullWatermark(hubId: 'hub-A', seq: 42));
+      await repo.setPullWatermark(const PullWatermark(relayId: 'relay-A', seq: 42));
       final stored = await repo.pullWatermark();
-      expect(stored!.hubId, 'hub-A');
+      expect(stored!.relayId, 'relay-A');
       expect(stored.seq, 42);
       expect(await repo.lastSyncedAt(), isNull);
     });

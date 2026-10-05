@@ -8,7 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 /// compile fine on the desktop and silently misbehave at runtime — the
 /// flavor constant is simply `null` there, a plugin call throws
 /// `MissingPluginException`. So those layers may not touch either; the gates
-/// belong in `services/`, `pages/` and `main.dart`, which the hub does not
+/// belong in `services/`, `pages/` and `main.dart`, which Mars Hub does not
 /// import (except `pages/sync_screen.dart`, which uses only portable APIs).
 void main() {
   const sharedDirs = ['lib/domain', 'lib/logic', 'lib/data', 'lib/sync', 'lib/util'];

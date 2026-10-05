@@ -15,7 +15,7 @@ Future<void> setupServiceLocator() async {
   getIt.registerSingleton<LocalStorageService>(storage);
 
   // Screenshot-only seed data: every *store* debug build starts with it,
-  // never the personal flavor (the fake thoughts would sync to the hub).
+  // never the personal flavor (the fake thoughts would sync to the relay).
   // Only seeds once per install, not on every relaunch, or manual edits made
   // while testing would get wiped out each time the app restarts.
   if (kDebugMode && !kSyncEnabled && !storage.getShowcaseSeeded()) {

@@ -8,7 +8,7 @@ import 'package:mars_thoughts/util/time_format.dart';
 /// Pairing and status for the personal flavor's sync. Reached from Settings;
 /// never built in the store flavor (the row that links here is gated).
 ///
-/// Three independent steps: the hub (URL + device token), the shared
+/// Three independent steps: the relay (URL + device token), the shared
 /// encryption key (generate on the first device, paste on every other), and
 /// then sync itself. Each step shows what it has and what it still needs.
 class SyncScreen extends StatefulWidget {
@@ -57,9 +57,9 @@ class _SyncScreenState extends State<SyncScreen> {
     }
   }
 
-  Future<void> _pairHub() async {
+  Future<void> _pairRelay() async {
     final result = await _prompt(
-      title: 'Hub',
+      title: 'Relay',
       fields: const ['Server URL', 'Device token'],
       initial: [_sync.serverUrl ?? 'https://', ''],
       obscure: const [false, true],
@@ -75,7 +75,7 @@ class _SyncScreenState extends State<SyncScreen> {
     final confirmed = await _confirm(
       'Generate a new key?',
       'Only do this on the first device. Every other device must be given '
-          'this exact key — and the hub can never recover it, so back it up.',
+          'this exact key — and the relay can never recover it, so back it up.',
     );
     if (!confirmed) return;
     await _guard(() async {
@@ -129,8 +129,8 @@ class _SyncScreenState extends State<SyncScreen> {
   Future<void> _unpair() async {
     final confirmed = await _confirm(
       'Unpair this device?',
-      'Removes the hub pairing and the encryption key from this device. '
-          'Thoughts stay where they are, here and on the hub.',
+      'Removes the relay pairing and the encryption key from this device. '
+          'Thoughts stay where they are, here and on the relay.',
     );
     if (!confirmed) return;
     await _guard(_sync.unpair);
@@ -159,12 +159,12 @@ class _SyncScreenState extends State<SyncScreen> {
                   ),
                   const SizedBox(height: 32),
                   _Step(
-                    label: 'Hub',
+                    label: 'Relay',
                     detail: _deviceId == null
                         ? 'Not paired'
                         : '${_sync.serverUrl}\nas "$_deviceId"',
                     action: _deviceId == null ? 'Pair' : 'Re-pair',
-                    onTap: _busy ? null : _pairHub,
+                    onTap: _busy ? null : _pairRelay,
                   ),
                   _Step(
                     label: 'Encryption key',
@@ -197,7 +197,7 @@ class _SyncScreenState extends State<SyncScreen> {
                     const SizedBox(height: 48),
                     _Step(
                       label: 'Unpair',
-                      detail: 'Forget hub and key on this device',
+                      detail: 'Forget relay and key on this device',
                       action: 'Unpair',
                       onTap: _busy ? null : _unpair,
                     ),
@@ -217,7 +217,7 @@ class _SyncScreenState extends State<SyncScreen> {
         : 'last sync ${formatThoughtTime(status.lastSyncedAt!)}';
     final skipped = status.undecryptable == 0
         ? ''
-        : '\n${status.undecryptable} item(s) on the hub could not be decrypted';
+        : '\n${status.undecryptable} item(s) on the relay could not be decrypted';
     return switch (status.phase) {
       SyncPhase.unpaired => 'Finish pairing above',
       SyncPhase.syncing => 'Syncing…',

@@ -71,7 +71,7 @@ class ThoughtsSyncRepository implements SyncRepository {
         continue;
       }
       // The envelope's id is authenticated (AAD); the payload's id must agree
-      // or the payload is not what the hub claims it is.
+      // or the payload is not what the relay claims it is.
       if (item.payload['id'] != item.itemId) continue;
       final thought = Thought.fromJson(item.payload);
       upserts.add(thought.copyWith(changedAt: item.updatedAt));
@@ -95,12 +95,12 @@ class ThoughtsSyncRepository implements SyncRepository {
   @override
   Future<PullWatermark?> pullWatermark() async {
     final seq = _storage.getSyncLastSeenSeq();
-    final hubId = _storage.getSyncLastSeenHubId();
-    if (seq == null || hubId == null) return null;
-    return PullWatermark(hubId: hubId, seq: seq);
+    final relayId = _storage.getSyncLastSeenRelayId();
+    if (seq == null || relayId == null) return null;
+    return PullWatermark(relayId: relayId, seq: seq);
   }
 
   @override
   Future<void> setPullWatermark(PullWatermark watermark) =>
-      _storage.setSyncPullWatermark(seq: watermark.seq, hubId: watermark.hubId);
+      _storage.setSyncPullWatermark(seq: watermark.seq, relayId: watermark.relayId);
 }

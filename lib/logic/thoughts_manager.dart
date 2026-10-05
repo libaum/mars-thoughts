@@ -20,7 +20,7 @@ class ThoughtsManager {
   final _storage = getIt<LocalStorageService>();
 
   /// Whether purges leave a trace for the sync layer. The caller decides
-  /// (the phone: its build flavor; the desktop hub: always) — this layer is
+  /// (the phone: its build flavor; Mars Hub: always) — this layer is
   /// shared with the desktop and must not read the Android flavor itself.
   final bool _recordPurges;
 
@@ -170,7 +170,7 @@ class ThoughtsManager {
       final existing = byId[t.id];
       if (existing != null) {
         if (existing.changedAt.isAfter(t.changedAt)) continue;
-        // Our own push coming back from the hub: same stamp, same content.
+        // Our own push coming back from the relay: same stamp, same content.
         // Rewriting it would only churn storage and the UI.
         if (existing.changedAt.isAtSameMomentAs(t.changedAt) &&
             jsonEncode(existing.toJson()) == jsonEncode(t.toJson())) {

@@ -12,7 +12,7 @@ class SyncStatus {
   final DateTime? lastSyncedAt;
   final String? error;
 
-  /// Non-fatal: items on the hub this device couldn't read last round.
+  /// Non-fatal: items on the relay this device couldn't read last round.
   final int undecryptable;
 
   const SyncStatus({
@@ -42,7 +42,7 @@ class SyncSetupException implements Exception {
 /// The three pairing steps are independent so a device can be paired in any
 /// order; sync only runs once all of them are in place — and, before the
 /// first push of real data, only after the key has been verified against the
-/// hub's key-check item (see [KeyCheck]).
+/// relay's key-check item (see [KeyCheck]).
 class SyncService {
   final LocalStorageService _storage;
   final ThoughtsManager _manager;
@@ -59,7 +59,7 @@ class SyncService {
   bool _keyVerified = false;
 
   /// Bumped on every change to the pairing (pair, key, unpair). A key check
-  /// still running when it moves on answers a question about a hub or key
+  /// still running when it moves on answers a question about a relay or key
   /// this service no longer uses — its result must not count.
   int _generation = 0;
 
@@ -69,7 +69,7 @@ class SyncService {
   }
   Future<void>? _inFlight;
 
-  /// [keys] defaults to the Android Keystore-backed store; the desktop hub
+  /// [keys] defaults to the Android Keystore-backed store; Mars Hub
   /// passes a file-backed one.
   SyncService({
     required LocalStorageService storage,
@@ -92,7 +92,7 @@ class SyncService {
       await _rebuildEngine();
     } on FormatException {
       // The store answered, but what's in it can't be used (garbled key or
-      // hub URL). Different remedy than a dead keystore: re-pair.
+      // relay URL). Different remedy than a dead keystore: re-pair.
       _engine = null;
       _publish(SyncPhase.error, error: 'Stored pairing is invalid — unpair and pair again');
     } catch (e) {
@@ -111,12 +111,12 @@ class SyncService {
   Future<bool> get hasDeviceToken async =>
       (await _keys.readDeviceToken()) != null;
 
-  /// Stores the hub URL and device token, then asks the hub which device id
+  /// Stores the relay URL and device token, then asks the relay which device id
   /// the token belongs to — the user never retypes the name they registered
-  /// on the server. Throws if the hub rejects the token or is unreachable.
+  /// on the server. Throws if the relay rejects the token or is unreachable.
   ///
   /// Plain `http://` is only accepted in debug builds (LAN testing against a
-  /// hub on the laptop); the release build talks TLS or not at all.
+  /// relay on the laptop); the release build talks TLS or not at all.
   Future<void> pairDevice({required String serverUrl, required String token}) async {
     final trimmedUrl = serverUrl.trim();
     final trimmedToken = token.trim();
@@ -125,7 +125,7 @@ class SyncService {
       throw SyncSetupException('Not a valid URL');
     }
     if (uri.scheme != 'https' && !(kDebugMode && uri.scheme == 'http')) {
-      throw SyncSetupException('Hub URL must use https://');
+      throw SyncSetupException('Relay URL must use https://');
     }
     if (trimmedToken.isEmpty) throw SyncSetupException('Token is empty');
 
@@ -135,17 +135,17 @@ class SyncService {
     await _storage.setSyncServerUrl(trimmedUrl);
     await _keys.writeDeviceToken(trimmedToken);
     await _keys.writeDeviceId(deviceId);
-    // A (re-)pair may point at a different hub: forget where pulls left off
-    // (the engine also detects a changed hub_id by itself) and re-verify the
-    // key against whatever hub this is.
-    await _storage.setSyncPullWatermark(seq: null, hubId: null);
+    // A (re-)pair may point at a different relay: forget where pulls left off
+    // (the engine also detects a changed relay id by itself) and re-verify the
+    // key against whatever relay this is.
+    await _storage.setSyncPullWatermark(seq: null, relayId: null);
     _pairingChanged();
     await _rebuildEngine();
   }
 
   /// First device only: mints the shared encryption key. Returns it encoded
   /// for transfer to the other devices — and for backing up, because there
-  /// is no way to recover it from the hub.
+  /// is no way to recover it from the relay.
   Future<String> generateEncryptionKey() async {
     final encryptor = await SyncEncryptor.generate();
     final exported = await encryptor.exportKey();
@@ -156,7 +156,7 @@ class SyncService {
   }
 
   /// Every other device: takes the key generated elsewhere. Rejects
-  /// anything that isn't a 32-byte key outright; if the hub is already
+  /// anything that isn't a 32-byte key outright; if the relay is already
   /// paired, verifies against its key-check item before storing, so a
   /// mistyped key can never push a single item.
   Future<void> importEncryptionKey(String encoded) async {
@@ -177,7 +177,7 @@ class SyncService {
           await KeyCheck(client: client, encryptor: encryptor, deviceId: deviceId).run();
       if (outcome == KeyCheckOutcome.mismatch) {
         throw SyncSetupException(
-          'This key does not match the one already used on the hub',
+          'This key does not match the one already used on the relay',
         );
       }
       // Only if nothing re-paired while the check ran.
@@ -186,26 +186,26 @@ class SyncService {
 
     await _keys.writeEncryptionKey(trimmed);
     // A re-pair may also land while the key is written or the engine is
-    // rebuilt; the check then was against a hub this service no longer uses.
+    // rebuilt; the check then was against a relay this service no longer uses.
     verified = verified && generation == _generation;
     _pairingChanged();
     final mine = _generation;
     await _rebuildEngine();
     // Set after the rebuild, which is itself a pairing change: the check
-    // above was for exactly this key against exactly this hub.
+    // above was for exactly this key against exactly this relay.
     if (verified && mine == _generation) _keyVerified = true;
   }
 
   Future<String?> exportEncryptionKey() => _keys.readEncryptionKey();
 
-  /// Drops pairing and key. The hub keeps its (ciphertext) copy of every
+  /// Drops pairing and key. The relay keeps its (ciphertext) copy of every
   /// thought; local thoughts stay as they are. Both watermarks reset so a
   /// later re-pair does one full round again.
   Future<void> unpair() async {
     await _keys.clear();
     await _storage.setSyncServerUrl(null);
     await _storage.setSyncLastSyncedAt(null);
-    await _storage.setSyncPullWatermark(seq: null, hubId: null);
+    await _storage.setSyncPullWatermark(seq: null, relayId: null);
     _pairingChanged();
     await _rebuildEngine();
   }
@@ -237,7 +237,7 @@ class SyncService {
         // the new pairing from scratch.
         if (generation != _generation) return;
         if (outcome == KeyCheckOutcome.mismatch) {
-          _publish(SyncPhase.error, error: 'Encryption key does not match the hub');
+          _publish(SyncPhase.error, error: 'Encryption key does not match the relay');
           return;
         }
         _keyVerified = true;
@@ -256,7 +256,7 @@ class SyncService {
     final key = await _keys.readEncryptionKey();
     final deviceId = await _keys.readDeviceId();
     // The pairing changed while the keys were read: a newer rebuild runs (or
-    // ran) for it. Finishing this one would point the engine at the old hub.
+    // ran) for it. Finishing this one would point the engine at the old relay.
     if (generation != _generation) return;
 
     _client = (url != null && token != null)
@@ -295,12 +295,12 @@ class SyncService {
   String _describe(Object e) {
     if (e is SyncClientException) {
       return switch (e.statusCode) {
-        401 => 'Hub rejected this device token',
-        429 => 'Hub is rate-limiting this device',
-        null => 'Hub unreachable',
-        // The hub's own explanation ("updated_at is in the future — this
-        // device's clock is ahead of the hub") beats a bare status code.
-        final code => e.detail == null ? 'Hub error $code' : 'Hub error $code: ${e.detail}',
+        401 => 'Relay rejected this device token',
+        429 => 'Relay is rate-limiting this device',
+        null => 'Relay unreachable',
+        // The relay's own explanation ("updated_at is in the future — this
+        // device's clock is ahead of the relay") beats a bare status code.
+        final code => e.detail == null ? 'Relay error $code' : 'Relay error $code: ${e.detail}',
       };
     }
     return 'Sync failed';

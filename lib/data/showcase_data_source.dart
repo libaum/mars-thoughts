@@ -4,11 +4,11 @@ import 'package:mars_thoughts/domain/thought.dart';
 ///
 /// Gated in `service_locator.dart`: only in `kDebugMode`, never in the
 /// personal flavor (a seeded device would push these fake thoughts to the
-/// sync hub and onto every other paired device), and only ever written once
+/// relay and onto every other paired device), and only ever written once
 /// per install (see `LocalStorageService.getShowcaseSeeded`) — not on every
 /// relaunch, or manual edits made while testing would get wiped out each
 /// time the app restarts. The gate lives in the locator, not here: `data/`
-/// is shared with the desktop hub and must not read the Android flavor.
+/// is shared with Mars Hub and must not read the Android flavor.
 class ShowcaseDataSource {
   const ShowcaseDataSource._();
 

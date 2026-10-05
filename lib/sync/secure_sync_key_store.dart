@@ -4,7 +4,7 @@ import 'package:mars_sync/mars_sync.dart';
 /// The pairing secrets, kept in Android Keystore-backed storage rather than
 /// SharedPreferences — a plain prefs XML is readable from any backup or root
 /// shell, and these two values are the whole ballgame: the token is the
-/// device's identity on the hub, the key is what makes every stored thought
+/// device's identity on the relay, the key is what makes every stored thought
 /// readable.
 class SecureSyncKeyStore implements SyncKeyStore {
   static const _keyDeviceToken = 'sync_device_token';
