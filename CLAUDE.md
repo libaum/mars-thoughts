@@ -77,7 +77,7 @@ Built on the shared `../mars_sync` package (client) and `../mars_sync_relay`
   `data/`, `sync/`, `util/` are imported by `../mars_hub` (Linux, no flavor →
   the constant is `false` there) and must not gate on it or use Android-only
   plugins — `test/desktop_boundary_test.dart` enforces this.
-- Local storage stays the source of truth; the relay only passes ciphertext along. Bidirectional,
+- Local storage stays the source of truth; the relay keeps an encrypted copy of every item. Bidirectional,
   last-write-wins by `changedAt`, deterministic tie-break by device id.
   `applySynced` skips anything changed locally after the incoming stamp.
 - **Editor baseline** (`_editingBaseline` in `main_screen.dart`): the text a
