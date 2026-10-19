@@ -1,52 +1,44 @@
 # Mars Thoughts
 
-Capture a thought before it disappears.
+[<img src="https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png" alt="Get it on Google Play" height="60">](https://play.google.com/store/apps/details?id=com.catchingclouds.marsthoughts)
 
-Mars Thoughts opens straight into a blank editor with the cursor blinking. You type, you leave, it's saved — no titles, no folders, no save button. Not notes, not a wiki: just somewhere for fleeting thoughts to land.
+A place for thoughts to land before they disappear. Open the app and the cursor is already there. No titles, no folders, no save button.
 
-## Features
+I kept losing thoughts because every notes app wanted a decision before I'd finished typing.
 
-- **Opens to write** — the app launches directly into the editor, ready for the next thought
-- **Auto-save** — leaving the editor or backgrounding the app saves it; empty drafts are discarded
-- **Three panels** — swipe between Pinned ← Write → All thoughts
-- **Pin what matters** — long-press a thought to keep it close
-- **Swipe to delete** — swipe left, no confirmation
-- **Search** — find any thought by its text
-- **Light & dark mode** — double-tap anywhere to toggle; follows system by default
-- **Offline & private** — everything stays on the device. No accounts, no tracking, no ads.
+<p>
+  <img src="android/fastlane/metadata/android/en-US/images/phoneScreenshots/01.png" width="19%" />
+  <img src="android/fastlane/metadata/android/en-US/images/phoneScreenshots/02.png" width="19%" />
+  <img src="android/fastlane/metadata/android/en-US/images/phoneScreenshots/03.png" width="19%" />
+  <img src="android/fastlane/metadata/android/en-US/images/phoneScreenshots/04.png" width="19%" />
+  <img src="android/fastlane/metadata/android/en-US/images/phoneScreenshots/05.png" width="19%" />
+  <img src="android/fastlane/metadata/android/en-US/images/phoneScreenshots/06.png" width="19%" />
+</p>
 
-## Interactions
+## What it does
 
-| Gesture | Action |
-|---|---|
-| Open app | Blank editor, cursor blinking |
-| Swipe left/right | Move between Pinned, Write, All thoughts |
-| Tap a thought | Edit it (full screen) |
-| Long-press a thought | Pin / unpin |
-| Swipe left on a thought | Delete |
-| Long-press empty list area | Settings |
-| Double-tap anywhere | Toggle light / dark |
+- Opens straight into a blank page. Leave, and it's still there when you come back.
+- Tap the plus to file a thought away and start a new one.
+- Swipe up for everything you've written, down for pinned thoughts, further down for settings.
+- Hold a thought to select it, then pin, copy or delete.
+- Swipe a thought left to delete (it goes to the trash), right to copy. Search finds anything.
+- Double tap switches between dark and light.
+- Offline and private. No ads, no tracking, no account.
 
-## Install
+## Build
+
+You need the [Flutter SDK](https://docs.flutter.dev/get-started/install).
 
 ```bash
-# Debug (installs as "Mars Thoughts Debug")
-./install_debug.sh
-
-# Release (installs as "Mars Thoughts")
-./install_release.sh
+./install_debug.sh      # installs as "Mars Thoughts Debug"
+./install_release.sh    # installs as "Mars Thoughts"
 ```
 
-## Tech Stack
+## Under the hood
 
-- Flutter / Dart
-- GetIt (dependency injection)
-- ValueNotifier + ValueListenableBuilder (state)
-- SharedPreferences (local persistence)
+Flutter and Dart, GetIt for DI, `ValueNotifier` for state, SharedPreferences for storage. A separate private build flavor adds encrypted sync to my own server; it is compiled out of the public app. See [CLAUDE.md](CLAUDE.md).
 
-## Design
-
-Part of the Mars product family. Pure black & white, Outfit font, light weights, no visual clutter.
+Part of [Mars](https://github.com/libaum/mars), a family of small, calm apps.
 
 ## License
 
