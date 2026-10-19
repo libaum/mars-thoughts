@@ -12,7 +12,6 @@ I kept losing thoughts because every notes app wanted a decision before I'd fini
   <img src="android/fastlane/metadata/android/en-US/images/phoneScreenshots/03.png" width="19%" />
   <img src="android/fastlane/metadata/android/en-US/images/phoneScreenshots/04.png" width="19%" />
   <img src="android/fastlane/metadata/android/en-US/images/phoneScreenshots/05.png" width="19%" />
-  <img src="android/fastlane/metadata/android/en-US/images/phoneScreenshots/06.png" width="19%" />
 </p>
 
 ## What it does
