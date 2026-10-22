@@ -36,9 +36,8 @@ Flavors `store` / `personal` × debug / release; all four install side by side.
 | personalRelease | `….marsthoughts.personal` | yes |
 | personalDebug | `….marsthoughts.personal.debug` | yes |
 
-Only `store` ever goes to the Play Store. The prefix is `catchingclouds`, unlike
-the ecosystem's `catchingcomets` — changing it makes a new app identity, so ask
-first.
+Only `store` ever goes to the Play Store. The applicationId is fixed (also in
+`android/fastlane/Appfile`); changing it makes a new app identity, so ask first.
 
 ## Hard rules
 
