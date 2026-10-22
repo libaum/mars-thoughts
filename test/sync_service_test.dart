@@ -1,11 +1,11 @@
-import 'dart:async';
-
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mars_sync/mars_sync.dart';
+import 'package:mars_sync_flutter/mars_sync_flutter.dart';
 import 'package:mars_thoughts/data/local_storage_service.dart';
 import 'package:mars_thoughts/logic/thoughts_manager.dart';
 import 'package:mars_thoughts/services/service_locator.dart';
-import 'package:mars_thoughts/sync/sync_service.dart';
+import 'package:mars_thoughts/sync/pairing.dart';
+import 'package:mars_thoughts/sync/thoughts_sync_repository.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// The relay's write rule, reduced to what these tests need.
@@ -39,12 +39,10 @@ class _Relay {
   bool holdsThoughts() => rows.keys.any((k) => k.startsWith('mars_thoughts/'));
 }
 
-/// Holds key-check pulls until [gate] opens, if one is set.
 class _Transport implements SyncTransport {
   final _Relay relay;
   final String deviceId;
-  final Completer<void>? gate;
-  _Transport(this.relay, this.deviceId, [this.gate]);
+  _Transport(this.relay, this.deviceId);
 
   @override
   Future<String> whoami() async => deviceId;
@@ -53,28 +51,18 @@ class _Transport implements SyncTransport {
   Future<void> push(String moduleId, List<SyncItem> items) async => relay.push(items);
 
   @override
-  Future<PullResult> pull(String moduleId, {required int sinceSeq}) async {
-    if (moduleId == KeyCheck.moduleId) await gate?.future;
-    return relay.pull(moduleId, sinceSeq);
-  }
+  Future<PullResult> pull(String moduleId, {required int sinceSeq}) async =>
+      relay.pull(moduleId, sinceSeq);
 }
 
 class _Keys implements SyncKeyStore {
   final _values = <String, String>{};
-  Completer<void>? keyWriteGate;
-  /// Holds the next token read only.
-  Completer<void>? tokenGate;
   @override
   Future<void> clear() async => _values.clear();
   @override
   Future<String?> readDeviceId() async => _values['id'];
   @override
-  Future<String?> readDeviceToken() async {
-    final g = tokenGate;
-    tokenGate = null;
-    await g?.future;
-    return _values['token'];
-  }
+  Future<String?> readDeviceToken() async => _values['token'];
   @override
   Future<String?> readEncryptionKey() async => _values['key'];
   @override
@@ -82,20 +70,20 @@ class _Keys implements SyncKeyStore {
   @override
   Future<void> writeDeviceToken(String token) async => _values['token'] = token;
   @override
-  Future<void> writeEncryptionKey(String base64Key) async {
-    await keyWriteGate?.future;
-    _values['key'] = base64Key;
-  }
+  Future<void> writeEncryptionKey(String base64Key) async => _values['key'] = base64Key;
 }
 
-/// A key check that outlives a re-pair answers a question about the old relay.
-/// Its "ok" must not let the device push to the new one unchecked.
+/// mars_thoughts' wiring of the shared SyncService. The service's own
+/// guarantees — the key check before the first push, the generation guard
+/// against re-pairs mid-check, overlapping rounds — are pinned in
+/// mars_sync_flutter's tests; these check that thoughts get them.
 void main() {
   late _Relay relayA;
   late _Relay relayB;
   late String keyA;
   late LocalStorageService storage;
   late ThoughtsManager manager;
+  late _Keys keys;
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
@@ -103,6 +91,7 @@ void main() {
     storage = await LocalStorageService.getInstance();
     getIt.registerSingleton<LocalStorageService>(storage);
     manager = ThoughtsManager(recordPurges: true);
+    keys = _Keys();
 
     relayA = _Relay();
     relayB = _Relay();
@@ -114,87 +103,52 @@ void main() {
     await KeyCheck(client: _Transport(relayB, 'first'), encryptor: b, deviceId: 'first').run();
   });
 
-  test('a key check in a round that outlives a re-pair does not count', () async {
-    final gate = Completer<void>();
-    final keys = _Keys();
-    final sync = SyncService(
-      storage: storage,
-      manager: manager,
-      keys: keys,
-      transport: (uri, token) =>
-          uri.host == 'a' ? _Transport(relayA, 'phone', gate) : _Transport(relayB, 'phone'),
-    );
-    await storage.setSyncServerUrl('https://a');
-    await keys.writeDeviceToken('t');
-    await keys.writeDeviceId('phone');
-    await keys.writeEncryptionKey(keyA);
+  SyncService thoughtsSync() => SyncService(
+        prefs: ThoughtsPairingPrefs(storage),
+        keys: keys,
+        repository: (deviceId) =>
+            ThoughtsSyncRepository(manager: manager, storage: storage, deviceId: deviceId),
+        strings: thoughtsSyncStrings,
+        transport: (uri, token) => _Transport(uri.host == 'a' ? relayA : relayB, 'phone'),
+      );
+
+  test('a paired phone pushes its thoughts, and unpair resets both watermarks', () async {
+    final sync = thoughtsSync();
     await sync.init();
+    await sync.pairDevice(serverUrl: 'https://a', token: 't');
+    await sync.importEncryptionKey(keyA);
     manager.create('geheim');
-
-    final round = sync.syncNow(); // key check against A, held at the gate
-    await Future<void>.delayed(const Duration(milliseconds: 20));
-    await sync.pairDevice(serverUrl: 'https://b', token: 't');
-    gate.complete();
-    await round;
-
     await sync.syncNow();
+
+    expect(sync.statusNotifier.value.phase, SyncPhase.idle);
+    expect(relayA.holdsThoughts(), isTrue);
+    expect(storage.getSyncLastSyncedAt(), isNotNull);
+    expect(storage.getSyncLastSeenSeq(), isNotNull);
+
+    await sync.unpair();
+    expect(storage.getSyncServerUrl(), isNull);
+    expect(storage.getSyncLastSyncedAt(), isNull);
+    expect(storage.getSyncLastSeenSeq(), isNull);
+    expect(sync.statusNotifier.value.phase, SyncPhase.unpaired);
+  });
+
+  test('reload() makes the next round prove the key against the new relay', () async {
+    // New for thoughts with the shared service: Mars Hub's leader could
+    // re-pair the shared state under it, too.
+    final sync = thoughtsSync();
+    await sync.init();
+    await sync.pairDevice(serverUrl: 'https://a', token: 't');
+    await sync.importEncryptionKey(keyA);
+    manager.create('geheim');
+    await sync.syncNow();
+    expect(relayA.holdsThoughts(), isTrue);
+
+    await storage.setSyncServerUrl('https://b');
+    await sync.reload();
+    await sync.syncNow();
+
     expect(sync.statusNotifier.value.phase, SyncPhase.error);
-    expect(relayB.holdsThoughts(), isFalse, reason: 'pushed with a key relay B never saw');
-  });
-
-  test('a key import that outlives a re-pair does not count', () async {
-    final keys = _Keys();
-    final sync = SyncService(
-      storage: storage,
-      manager: manager,
-      keys: keys,
-      transport: (uri, token) => _Transport(uri.host == 'a' ? relayA : relayB, 'phone'),
-    );
-    await storage.setSyncServerUrl('https://a');
-    await keys.writeDeviceToken('t');
-    await keys.writeDeviceId('phone');
-    await sync.init();
-    manager.create('geheim');
-
-    keys.keyWriteGate = Completer<void>();
-    final import = sync.importEncryptionKey(keyA); // checked against A
-    await Future<void>.delayed(const Duration(milliseconds: 20));
-    final repair = sync.pairDevice(serverUrl: 'https://b', token: 't');
-    await Future<void>.delayed(const Duration(milliseconds: 20));
-    keys.keyWriteGate!.complete();
-    await import;
-    await repair;
-
-    await sync.syncNow();
-    expect(relayB.holdsThoughts(), isFalse, reason: 'pushed with a key relay B never saw');
-  });
-
-  test('a re-pair during the key import\'s engine rebuild wins, unverified',
-      () async {
-    final keys = _Keys();
-    final sync = SyncService(
-      storage: storage,
-      manager: manager,
-      keys: keys,
-      transport: (uri, token) => _Transport(uri.host == 'a' ? relayA : relayB, 'phone'),
-    );
-    await storage.setSyncServerUrl('https://a');
-    await keys.writeDeviceToken('t');
-    await keys.writeDeviceId('phone');
-    await sync.init();
-    manager.create('geheim');
-
-    keys.tokenGate = Completer<void>();
-    final gate = keys.tokenGate!;
-    final import = sync.importEncryptionKey(keyA); // rebuild stalls on the token
-    await Future<void>.delayed(const Duration(milliseconds: 20));
-    await sync.pairDevice(serverUrl: 'https://b', token: 't');
-    gate.complete();
-    await import;
-
-    await sync.syncNow();
-    expect(sync.statusNotifier.value.phase, SyncPhase.error,
-        reason: 'the stale rebuild pointed the engine back at relay A');
+    expect(sync.statusNotifier.value.error, 'Encryption key does not match the relay');
     expect(relayB.holdsThoughts(), isFalse, reason: 'pushed with a key relay B never saw');
   });
 }

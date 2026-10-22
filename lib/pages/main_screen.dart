@@ -11,8 +11,8 @@ import 'package:mars_thoughts/pages/widgets/panel_indicator.dart';
 import 'package:mars_thoughts/pages/widgets/thought_row.dart';
 import 'package:mars_thoughts/services/service_locator.dart';
 import 'package:mars_thoughts/sync/sync_flags.dart';
-import 'package:mars_thoughts/sync/sync_service.dart';
 import 'package:mars_thoughts/theme/theme_constants.dart';
+import 'package:mars_sync_flutter/mars_sync_flutter.dart';
 
 /// Four panels stacked on one continuous vertical axis, top to bottom:
 /// Settings, Pinned, Write, All. The whole stack moves together as a single

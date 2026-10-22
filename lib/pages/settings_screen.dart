@@ -2,13 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:mars_thoughts/data/local_storage_service.dart';
 import 'package:mars_thoughts/pages/about_screen.dart';
 import 'package:mars_thoughts/pages/dialogs/background_color_dialog.dart';
-import 'package:mars_thoughts/pages/sync_screen.dart';
 import 'package:mars_thoughts/pages/trash_screen.dart';
 import 'package:mars_thoughts/services/service_locator.dart';
+import 'package:mars_thoughts/sync/pairing.dart';
 import 'package:mars_thoughts/sync/sync_flags.dart';
 import 'package:mars_thoughts/theme/theme_constants.dart';
 import 'package:mars_thoughts/theme/theme_manager.dart';
 import 'package:mars_thoughts/util/instant_route.dart';
+import 'package:mars_sync_flutter/mars_sync_flutter.dart';
+import 'package:mars_sync_flutter/sync_screen.dart';
 
 /// The topmost panel on `MainScreen`'s vertical axis, reached by pulling past
 /// the top of the pinned list. Positioned and dragged by `MainScreen` exactly
@@ -91,7 +93,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
               label: 'Sync',
               onTap: () => Navigator.push(
                 context,
-                instantRoute((_) => const SyncScreen()),
+                instantRoute((_) => SyncScreen(
+                      sync: getIt<SyncService>(),
+                      strings: thoughtsSyncStrings,
+                      firstDevice: true,
+                    )),
               ),
             ),
           _NavRow(

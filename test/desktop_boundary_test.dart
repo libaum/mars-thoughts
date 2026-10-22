@@ -9,15 +9,15 @@ import 'package:flutter_test/flutter_test.dart';
 /// flavor constant is simply `null` there, a plugin call throws
 /// `MissingPluginException`. So those layers may not touch either; the gates
 /// belong in `services/`, `pages/` and `main.dart`, which Mars Hub does not
-/// import (except `pages/sync_screen.dart`, which uses only portable APIs).
+/// import. (The pairing screen is mars_sync_flutter's, portable.)
 void main() {
   const sharedDirs = ['lib/domain', 'lib/logic', 'lib/data', 'lib/sync', 'lib/util'];
 
-  // The two files that *define* the boundary are the only ones allowed to
-  // mention what's behind it.
+  // The file that *defines* the boundary is the only one allowed to mention
+  // what's behind it. The phone's key store lives in mars_sync_flutter and
+  // is constructed in services/.
   const exempt = {
     'lib/sync/sync_flags.dart': ['appFlavor', 'kSyncEnabled', 'package:flutter/services.dart'],
-    'lib/sync/secure_sync_key_store.dart': ['flutter_secure_storage'],
   };
 
   const forbidden = [
@@ -25,6 +25,7 @@ void main() {
     'kSyncEnabled',
     'appFlavor',
     'flutter_secure_storage',
+    'secure_sync_key_store',
     'dart:io',
     'package:flutter/services.dart',
   ];
