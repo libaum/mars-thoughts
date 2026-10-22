@@ -73,7 +73,15 @@ class ThoughtsSyncRepository implements SyncRepository {
       // The envelope's id is authenticated (AAD); the payload's id must agree
       // or the payload is not what the relay claims it is.
       if (item.payload['id'] != item.itemId) continue;
-      final thought = Thought.fromJson(item.payload);
+      final Thought thought;
+      try {
+        thought = Thought.fromJson(item.payload);
+      } on Object {
+        // A shape this build can't read (a newer version elsewhere): skip it
+        // rather than fail the round — a throw keeps the pull watermark where
+        // it is, so the same item would fail every round after this one.
+        continue;
+      }
       upserts.add(thought.copyWith(changedAt: item.updatedAt));
     }
     _manager.applySynced(upserts, removed);

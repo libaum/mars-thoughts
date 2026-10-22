@@ -264,4 +264,35 @@ void main() {
       expect(storage.getSyncPurged(), isEmpty);
     });
   });
+
+  test('ThoughtsSyncRepository meets the mars_sync repository contract', () async {
+    final fixture = SyncContractFixture(
+      freshRepository: () async {
+        SharedPreferences.resetStatic();
+        SharedPreferences.setMockInitialValues({});
+        await getIt.reset();
+        final storage = await LocalStorageService.getInstance();
+        getIt.registerSingleton<LocalStorageService>(storage);
+        return ThoughtsSyncRepository(
+          manager: ThoughtsManager(recordPurges: true),
+          storage: storage,
+          deviceId: 'phone',
+        );
+      },
+      item: (key, at, {variant = 0}) => SyncItem(
+        itemId: key,
+        moduleId: 'mars_thoughts',
+        deviceId: 'laptop',
+        updatedAt: at,
+        payload: Thought(
+          id: key,
+          text: 'thought $variant',
+          createdAt: DateTime(2026, 1, 1),
+          updatedAt: DateTime(2026, 1, 1),
+          changedAt: at,
+        ).toJson(),
+      ),
+    );
+    expect(await checkSyncRepositoryContract(fixture), isEmpty);
+  });
 }
