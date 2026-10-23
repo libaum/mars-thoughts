@@ -3,18 +3,10 @@ import 'package:mars_thoughts/domain/thought.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Thin wrapper around SharedPreferences for persisting app state.
-/// Local only. The `sync_*` keys at the bottom are read exclusively by the
-/// personal flavor's sync layer (see lib/sync/) and stay untouched in the
-/// store flavor.
+/// Local only. The personal flavor's sync keeps its `sync_*` keys in the same
+/// prefs, through its own SyncLedger (see lib/sync/pairing.dart).
 class LocalStorageService {
   static const _keyThoughts = 'thoughts';
-  static const _keySyncPurged = 'sync_purged';
-  static const _keySyncServerUrl = 'sync_server_url';
-  static const _keySyncLastSyncedAt = 'sync_last_synced_at';
-  static const _keySyncLastSeenSeq = 'sync_last_seen_seq';
-  // Value keeps the old "hub" name: paired devices already store it
-  // (docs/adr/0001-relay-rename-keeps-hub-id-on-the-wire.md at the Mars root).
-  static const _keySyncLastSeenRelayId = 'sync_last_seen_hub_id';
   static const _keyThemeIsDark = 'theme_is_dark';
   static const _keySettingsHintSeen = 'settings_hint_seen';
   static const _keyDraftText = 'draft_text';
@@ -134,72 +126,6 @@ class LocalStorageService {
       await _prefs.remove(_keyDarkBackground);
     } else {
       await _prefs.setInt(_keyDarkBackground, argb);
-    }
-  }
-
-  // ── Sync (personal flavor only) ──────────────────────────────────────────
-
-  /// Ids of thoughts permanently removed from the trash, with the time it
-  /// happened. Once a thought is purged it's gone from the list, so this is
-  /// the only trace the sync layer has left to tell other devices to drop
-  /// their copy too. Pruned again after a successful sync.
-  Map<String, DateTime> getSyncPurged() {
-    final json = _prefs.getString(_keySyncPurged);
-    if (json == null) return {};
-    try {
-      final map = jsonDecode(json) as Map<String, dynamic>;
-      return map.map(
-        (id, ms) => MapEntry(id, DateTime.fromMillisecondsSinceEpoch(ms as int)),
-      );
-    } catch (_) {
-      return {};
-    }
-  }
-
-  Future<void> setSyncPurged(Map<String, DateTime> purged) async {
-    final json = jsonEncode(
-      purged.map((id, at) => MapEntry(id, at.millisecondsSinceEpoch)),
-    );
-    await _prefs.setString(_keySyncPurged, json);
-  }
-
-  String? getSyncServerUrl() => _prefs.getString(_keySyncServerUrl);
-
-  Future<void> setSyncServerUrl(String? url) async {
-    if (url == null) {
-      await _prefs.remove(_keySyncServerUrl);
-    } else {
-      await _prefs.setString(_keySyncServerUrl, url);
-    }
-  }
-
-  DateTime? getSyncLastSyncedAt() {
-    final ms = _prefs.getInt(_keySyncLastSyncedAt);
-    return ms == null ? null : DateTime.fromMillisecondsSinceEpoch(ms);
-  }
-
-  Future<void> setSyncLastSyncedAt(DateTime? at) async {
-    if (at == null) {
-      await _prefs.remove(_keySyncLastSyncedAt);
-    } else {
-      await _prefs.setInt(_keySyncLastSyncedAt, at.millisecondsSinceEpoch);
-    }
-  }
-
-  /// Relay sequence number up to which this device has pulled, and which relay
-  /// instance that number belongs to. Independent of [getSyncLastSyncedAt],
-  /// which is the *push* watermark on the local clock.
-  int? getSyncLastSeenSeq() => _prefs.getInt(_keySyncLastSeenSeq);
-
-  String? getSyncLastSeenRelayId() => _prefs.getString(_keySyncLastSeenRelayId);
-
-  Future<void> setSyncPullWatermark({required int? seq, required String? relayId}) async {
-    if (seq == null || relayId == null) {
-      await _prefs.remove(_keySyncLastSeenSeq);
-      await _prefs.remove(_keySyncLastSeenRelayId);
-    } else {
-      await _prefs.setInt(_keySyncLastSeenSeq, seq);
-      await _prefs.setString(_keySyncLastSeenRelayId, relayId);
     }
   }
 }

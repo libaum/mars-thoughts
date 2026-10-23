@@ -6,10 +6,11 @@ import 'package:mars_thoughts/data/showcase_data_source.dart';
 import 'package:mars_thoughts/logic/thoughts_manager.dart';
 import 'package:mars_thoughts/sync/pairing.dart';
 import 'package:mars_thoughts/sync/sync_flags.dart';
-import 'package:mars_thoughts/sync/thoughts_sync_repository.dart';
+import 'package:mars_thoughts/sync/thoughts_sync_items.dart';
 import 'package:mars_thoughts/theme/theme_manager.dart';
 import 'package:mars_sync_flutter/mars_sync_flutter.dart';
 import 'package:mars_sync_flutter/secure_sync_key_store.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 final getIt = GetIt.instance;
 
@@ -28,19 +29,21 @@ Future<void> setupServiceLocator() async {
   }
 
   getIt.registerSingleton<ThemeManager>(ThemeManager());
-  final manager = ThoughtsManager(recordPurges: kSyncEnabled);
-  getIt.registerSingleton<ThoughtsManager>(manager);
 
   // Personal flavor only — compiled out of the store flavor entirely.
+  final ledger =
+      kSyncEnabled ? thoughtsLedger(await SharedPreferences.getInstance()) : null;
+  final manager = ThoughtsManager(onPurged: ledger?.recordPurged);
+  getIt.registerSingleton<ThoughtsManager>(manager);
+
   if (kSyncEnabled) {
-    final sync = SyncService(
-      prefs: ThoughtsPairingPrefs(storage),
+    final sync = SyncService.module(
+      ledger: ledger!,
       // Where the installed app's secrets are — changing the options loses them.
       keys: SecureSyncKeyStore(const FlutterSecureStorage(
         aOptions: AndroidOptions(encryptedSharedPreferences: true),
       )),
-      repository: (deviceId) =>
-          ThoughtsSyncRepository(manager: manager, storage: storage, deviceId: deviceId),
+      items: (deviceId) => ThoughtsSyncItems(manager: manager, deviceId: deviceId),
       strings: thoughtsSyncStrings,
     );
     await sync.init();

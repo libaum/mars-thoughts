@@ -19,16 +19,18 @@ import 'package:mars_thoughts/services/service_locator.dart';
 class ThoughtsManager {
   final _storage = getIt<LocalStorageService>();
 
-  /// Whether purges leave a trace for the sync layer. The caller decides
-  /// (the phone: its build flavor; Mars Hub: always) — this layer is
+  /// Where purges leave a trace for the sync layer (id → purge time), so
+  /// other devices still hear about thoughts that are gone here. The caller
+  /// decides (the phone: its build flavor; Mars Hub: always) — this layer is
   /// shared with the desktop and must not read the Android flavor itself.
-  final bool _recordPurges;
+  /// Null: a purge is simply local.
+  final void Function(Map<String, DateTime> stamps)? _onPurged;
 
   /// Every stored thought (live + trashed), sorted newest-updated first.
   late final ValueNotifier<List<Thought>> thoughtsNotifier;
 
-  ThoughtsManager({required bool recordPurges})
-      : _recordPurges = recordPurges {
+  ThoughtsManager({void Function(Map<String, DateTime> stamps)? onPurged})
+      : _onPurged = onPurged {
     final thoughts = _storage.getThoughts();
     _sortByUpdated(thoughts);
     thoughtsNotifier = ValueNotifier(thoughts);
@@ -190,16 +192,11 @@ class ThoughtsManager {
     if (changed) _commit(byId.values.toList());
   }
 
-  /// Remembers purged ids so the sync layer can still tell other devices
-  /// about them after the thoughts themselves are gone from the list.
   void _recordPurged(Set<String> ids) {
-    if (!_recordPurges || ids.isEmpty) return;
-    final purged = _storage.getSyncPurged();
+    final onPurged = _onPurged;
+    if (onPurged == null || ids.isEmpty) return;
     final now = DateTime.now();
-    for (final id in ids) {
-      purged[id] = now;
-    }
-    _storage.setSyncPurged(purged);
+    onPurged({for (final id in ids) id: now});
   }
 
   /// Sorts, persists, and publishes a new thought list.

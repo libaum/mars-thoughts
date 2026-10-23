@@ -5,7 +5,7 @@ import 'package:mars_thoughts/data/local_storage_service.dart';
 import 'package:mars_thoughts/logic/thoughts_manager.dart';
 import 'package:mars_thoughts/services/service_locator.dart';
 import 'package:mars_thoughts/sync/pairing.dart';
-import 'package:mars_thoughts/sync/thoughts_sync_repository.dart';
+import 'package:mars_thoughts/sync/thoughts_sync_items.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// The relay's write rule, reduced to what these tests need.
@@ -81,16 +81,17 @@ void main() {
   late _Relay relayA;
   late _Relay relayB;
   late String keyA;
-  late LocalStorageService storage;
+  late SyncLedger ledger;
   late ThoughtsManager manager;
   late _Keys keys;
 
   setUp(() async {
+    SharedPreferences.resetStatic();
     SharedPreferences.setMockInitialValues({});
     await getIt.reset();
-    storage = await LocalStorageService.getInstance();
-    getIt.registerSingleton<LocalStorageService>(storage);
-    manager = ThoughtsManager(recordPurges: true);
+    getIt.registerSingleton<LocalStorageService>(await LocalStorageService.getInstance());
+    ledger = thoughtsLedger(await SharedPreferences.getInstance());
+    manager = ThoughtsManager(onPurged: ledger.recordPurged);
     keys = _Keys();
 
     relayA = _Relay();
@@ -103,11 +104,10 @@ void main() {
     await KeyCheck(client: _Transport(relayB, 'first'), encryptor: b, deviceId: 'first').run();
   });
 
-  SyncService thoughtsSync() => SyncService(
-        prefs: ThoughtsPairingPrefs(storage),
+  SyncService thoughtsSync() => SyncService.module(
+        ledger: ledger,
         keys: keys,
-        repository: (deviceId) =>
-            ThoughtsSyncRepository(manager: manager, storage: storage, deviceId: deviceId),
+        items: (deviceId) => ThoughtsSyncItems(manager: manager, deviceId: deviceId),
         strings: thoughtsSyncStrings,
         transport: (uri, token) => _Transport(uri.host == 'a' ? relayA : relayB, 'phone'),
       );
@@ -122,13 +122,13 @@ void main() {
 
     expect(sync.statusNotifier.value.phase, SyncPhase.idle);
     expect(relayA.holdsThoughts(), isTrue);
-    expect(storage.getSyncLastSyncedAt(), isNotNull);
-    expect(storage.getSyncLastSeenSeq(), isNotNull);
+    expect(ledger.lastSyncedAt, isNotNull);
+    expect(ledger.pullWatermark, isNotNull);
 
     await sync.unpair();
-    expect(storage.getSyncServerUrl(), isNull);
-    expect(storage.getSyncLastSyncedAt(), isNull);
-    expect(storage.getSyncLastSeenSeq(), isNull);
+    expect(ledger.serverUrl, isNull);
+    expect(ledger.lastSyncedAt, isNull);
+    expect(ledger.pullWatermark, isNull);
     expect(sync.statusNotifier.value.phase, SyncPhase.unpaired);
   });
 
@@ -143,7 +143,7 @@ void main() {
     await sync.syncNow();
     expect(relayA.holdsThoughts(), isTrue);
 
-    await storage.setSyncServerUrl('https://b');
+    await ledger.setServerUrl('https://b');
     await sync.reload();
     await sync.syncNow();
 

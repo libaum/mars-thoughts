@@ -4,7 +4,9 @@ import 'package:mars_thoughts/data/local_storage_service.dart';
 import 'package:mars_thoughts/domain/thought.dart';
 import 'package:mars_thoughts/logic/thoughts_manager.dart';
 import 'package:mars_thoughts/services/service_locator.dart';
-import 'package:mars_thoughts/sync/thoughts_sync_repository.dart';
+import 'package:mars_sync_flutter/mars_sync_flutter.dart';
+import 'package:mars_thoughts/sync/pairing.dart';
+import 'package:mars_thoughts/sync/thoughts_sync_items.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -52,7 +54,7 @@ void main() {
       getIt.registerSingleton<LocalStorageService>(
         await LocalStorageService.getInstance(),
       );
-      manager = ThoughtsManager(recordPurges: true);
+      manager = ThoughtsManager();
     });
 
     test('pinning bumps changedAt but leaves updatedAt alone', () async {
@@ -119,21 +121,21 @@ void main() {
     });
   });
 
-  group('ThoughtsSyncRepository', () {
-    late LocalStorageService storage;
+  group('ThoughtsSyncItems on the ledger', () {
+    late SyncLedger ledger;
     late ThoughtsManager manager;
-    late ThoughtsSyncRepository repo;
+    late SyncRepository repo;
 
     setUp(() async {
+      SharedPreferences.resetStatic();
       SharedPreferences.setMockInitialValues({});
       await getIt.reset();
-      storage = await LocalStorageService.getInstance();
-      getIt.registerSingleton<LocalStorageService>(storage);
-      manager = ThoughtsManager(recordPurges: true);
-      repo = ThoughtsSyncRepository(
-        manager: manager,
-        storage: storage,
-        deviceId: 'phone',
+      getIt.registerSingleton<LocalStorageService>(await LocalStorageService.getInstance());
+      ledger = thoughtsLedger(await SharedPreferences.getInstance());
+      manager = ThoughtsManager(onPurged: ledger.recordPurged);
+      repo = ledger.repository(
+        ThoughtsSyncItems(manager: manager, deviceId: 'phone'),
+        'phone',
       );
     });
 
@@ -256,27 +258,29 @@ void main() {
       final t = manager.create('hello')!;
       manager.delete(t.id);
       manager.purge(t.id);
-      final purgedAt = storage.getSyncPurged()[t.id]!;
+      final purgedAt = ledger.purged[t.id]!.recorded;
 
       await repo.setLastSyncedAt(purgedAt.add(const Duration(seconds: 1)));
 
       expect(await repo.lastSyncedAt(), purgedAt.add(const Duration(seconds: 1)));
-      expect(storage.getSyncPurged(), isEmpty);
+      expect(ledger.purged, isEmpty);
     });
   });
 
-  test('ThoughtsSyncRepository meets the mars_sync repository contract', () async {
+  test('ThoughtsSyncItems on the ledger meet the mars_sync repository contract', () async {
     final fixture = SyncContractFixture(
       freshRepository: () async {
         SharedPreferences.resetStatic();
         SharedPreferences.setMockInitialValues({});
         await getIt.reset();
-        final storage = await LocalStorageService.getInstance();
-        getIt.registerSingleton<LocalStorageService>(storage);
-        return ThoughtsSyncRepository(
-          manager: ThoughtsManager(recordPurges: true),
-          storage: storage,
-          deviceId: 'phone',
+        getIt.registerSingleton<LocalStorageService>(await LocalStorageService.getInstance());
+        final ledger = thoughtsLedger(await SharedPreferences.getInstance());
+        return ledger.repository(
+          ThoughtsSyncItems(
+            manager: ThoughtsManager(onPurged: ledger.recordPurged),
+            deviceId: 'phone',
+          ),
+          'phone',
         );
       },
       item: (key, at, {variant = 0}) => SyncItem(
