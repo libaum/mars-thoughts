@@ -51,3 +51,6 @@ apk_archive/
 .claude/
 .tokensave/
 /android/.kotlin/
+
+# Gradle build output under android/
+android/build/
