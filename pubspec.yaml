@@ -20,7 +20,7 @@ dependencies:
   # SyncService, key store and pairing screen, shared by every synced app.
   mars_sync_flutter:
     path: ../mars_sync_flutter
-  flutter_secure_storage: ^9.2.2
+  flutter_secure_storage: ^10.3.1
 
 dev_dependencies:
   flutter_test:
