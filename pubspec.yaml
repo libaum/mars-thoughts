@@ -33,18 +33,22 @@ flutter_launcher_icons:
   android: true
   ios: false
   image_path: "assets/icon.png"
+  adaptive_icon_background: "#000000"
+  adaptive_icon_foreground: "assets/icon_fg.png"
 
-# Black splash with the logo centered. Regenerate after edits:
-#   dart run flutter_native_splash:create
 flutter_native_splash:
   color: "#000000"
-  image: "assets/splash_logo.png"
-  android_12:
-    color: "#000000"
-    image: "assets/splash_logo.png"
+  image: assets/icon_fg.png
+  color_dark: "#000000"
+  image_dark: assets/icon_fg.png
   android: true
   ios: false
   web: false
+  android_12:
+    color: "#000000"
+    image: assets/icon_fg.png
+    color_dark: "#000000"
+    image_dark: assets/icon_fg.png
 
 flutter:
   uses-material-design: true
