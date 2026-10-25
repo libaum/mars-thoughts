@@ -40,9 +40,7 @@ Future<void> setupServiceLocator() async {
     final sync = SyncService.module(
       ledger: ledger!,
       // Where the installed app's secrets are — changing the options loses them.
-      keys: SecureSyncKeyStore(const FlutterSecureStorage(
-        aOptions: AndroidOptions(encryptedSharedPreferences: true),
-      )),
+      keys: SecureSyncKeyStore(const FlutterSecureStorage()),
       items: (deviceId) => ThoughtsSyncItems(manager: manager, deviceId: deviceId),
       strings: thoughtsSyncStrings,
     );
